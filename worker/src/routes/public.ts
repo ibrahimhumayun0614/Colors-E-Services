@@ -1,0 +1,305 @@
+import { Hono } from 'hono';
+import QRCode from 'qrcode';
+import type { Env, Invoice, InvoiceItem, UserProfile } from '../types';
+import { paymentDetailsHtml } from '../lib/payment-html';
+import { pickInvoicePaymentAccounts } from '../lib/bank-accounts';
+import { verifyInvoiceShareToken } from '../lib/share';
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function stripCatalogSerialPrefix(description: string): string {
+  const trimmed = description.trim();
+  const without = trimmed.replace(/^\d+\s*[—–-]\s*/, '').trim();
+  return without || trimmed;
+}
+
+function formatCurrency(amount: number, currency = 'USD'): string {
+  const code = currency?.trim() || 'USD';
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: code }).format(amount);
+  } catch {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  }
+}
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function addressLine(src: {
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+}): string {
+  return [src.address, [src.city, src.state, src.zip].filter(Boolean).join(', ')]
+    .filter(Boolean)
+    .join(', ');
+}
+
+type PublicInvoice = Invoice & {
+  client_name?: string;
+  client_company?: string | null;
+  client_email?: string | null;
+  client_phone?: string | null;
+  client_address?: string | null;
+  client_city?: string | null;
+  client_state?: string | null;
+  client_zip?: string | null;
+};
+
+function renderInvoicePage(opts: {
+  invoice: PublicInvoice;
+  items: InvoiceItem[];
+  from: UserProfile;
+  qrDataUrl: string | null;
+}): string {
+  const { invoice, items, from, qrDataUrl } = opts;
+  const currency = invoice.currency?.trim() || from.default_currency || 'USD';
+  const companyName = from.company_name?.trim() || 'Your Company';
+  const billName = invoice.client_company?.trim() || invoice.client_name || '—';
+  const subtotal = items.reduce((sum, i) => sum + i.quantity * i.rate, 0);
+  const taxRate = invoice.tax_rate ?? 0;
+  const taxAmount = subtotal * (taxRate / 100);
+  const total = subtotal + taxAmount;
+  const numberLabel = invoice.invoice_number.startsWith('#')
+    ? invoice.invoice_number
+    : `#${invoice.invoice_number}`;
+
+  const fromAddress = addressLine(from);
+  const toAddress = addressLine({
+    address: invoice.client_address,
+    city: invoice.client_city,
+    state: invoice.client_state,
+    zip: invoice.client_zip,
+  });
+
+  const fromDetails = [
+    fromAddress ? `<p>${escapeHtml(fromAddress)}</p>` : '',
+    from.tax_id ? `<p>ABN ${escapeHtml(from.tax_id)}</p>` : '',
+    from.email ? `<p>${escapeHtml(from.email)}</p>` : '',
+    from.phone ? `<p>${escapeHtml(from.phone)}</p>` : '',
+    from.website ? `<p>${escapeHtml(from.website)}</p>` : '',
+  ].join('');
+
+  const toDetails = [
+    toAddress ? `<p>${escapeHtml(toAddress)}</p>` : '',
+    invoice.client_email ? `<p>${escapeHtml(invoice.client_email)}</p>` : '',
+    invoice.client_phone ? `<p>${escapeHtml(invoice.client_phone)}</p>` : '',
+  ].join('');
+
+  const paymentDetails = paymentDetailsHtml(
+    {
+      ...from,
+      bank_accounts: pickInvoicePaymentAccounts(invoice, from),
+    },
+    companyName
+  );
+
+  const logoBlock = from.logo_data
+    ? `<img class="logo" src="${escapeHtml(from.logo_data)}" alt="" />`
+    : '';
+
+  const rows = items
+    .map((item) => {
+      const line = item.quantity * item.rate;
+      const lineTax = line * (taxRate / 100);
+      return `
+        <tr>
+          <td class="desc">${escapeHtml(stripCatalogSerialPrefix(item.description))}</td>
+          <td class="num">${escapeHtml(item.quantity)}</td>
+          <td class="num">${escapeHtml(formatCurrency(item.rate, currency))}</td>
+          <td class="num">${escapeHtml(formatCurrency(lineTax, currency))}</td>
+          <td class="num amount">${escapeHtml(formatCurrency(line, currency))}</td>
+        </tr>`;
+    })
+    .join('');
+
+  const noteText = invoice.notes?.trim() || '';
+
+  const qrBlock = qrDataUrl
+    ? `<img class="qr" src="${escapeHtml(qrDataUrl)}" alt="Scan to view and download invoice" />`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(invoice.invoice_number)}</title>
+  <style>
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;background:#f5f5f5}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#171717;font-size:13px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:flex-end;padding:12px 16px;background:#171717}
+    .btn{appearance:none;border:0;border-radius:6px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#fff;color:#171717}
+    .sheet{max-width:760px;margin:20px auto;background:#fff;padding:44px 40px}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
+    .title{font-size:40px;font-weight:700;margin:0;letter-spacing:-.03em;line-height:1}
+    .inv-no{margin:10px 0 0;color:#737373;font-size:14px;font-weight:500}
+    .brand{font-size:26px;font-weight:700;letter-spacing:-.02em}
+    .logo{max-height:40px;max-width:160px;object-fit:contain;filter:grayscale(1)}
+    .divider{border:0;border-top:1px solid #e5e5e5;margin:28px 0 0}
+    .meta{display:flex;justify-content:flex-end;gap:24px;margin-top:28px}
+    .muted{color:#a3a3a3;font-size:11px;margin:0 0 4px}
+    .dates{display:flex;gap:40px;text-align:right}
+    .dates strong{display:block;margin-top:2px;font-size:13px}
+    .parties{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:36px}
+    .parties .name{font-weight:600;margin:8px 0 4px;font-size:13px}
+    .parties p{margin:1px 0;color:#525252;font-size:12px}
+    table{width:100%;border-collapse:collapse;margin-top:36px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden}
+    thead th{background:#f5f5f5;text-align:left;padding:12px 14px;font-size:11px;font-weight:500;color:#737373}
+    th.num,td.num{text-align:right}
+    td{padding:14px;border-top:1px solid #e5e5e5;vertical-align:top}
+    td.desc{font-weight:500}
+    td.amount{font-weight:500}
+    .total-row td{border-top:1px solid #d4d4d4;font-size:15px;font-weight:700;padding:16px 14px}
+    .note{margin-top:22px;padding:12px 14px;border:1px solid #e5e5e5;border-radius:8px;background:#fafafa;color:#525252;font-size:12px}
+    .foot{display:grid;grid-template-columns:1.2fr auto;gap:40px;margin-top:36px;align-items:end}
+    .pay h4{margin:0 0 8px;font-size:14px}
+    .pay p{margin:1px 0;color:#525252;font-size:12px}
+    .sign{text-align:right}
+    .qr{width:80px;height:80px;border:1px solid #d4d4d4;display:block;margin:0 0 0 auto}
+    @media (max-width:640px){.sheet{margin:12px;padding:28px 18px}.meta,.parties,.foot,.dates{display:block}.dates>div,.parties>div{margin-top:16px;text-align:left}}
+    @media print{.toolbar{display:none}body{background:#fff}.sheet{margin:0;max-width:none}@page{margin:12mm}}
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="btn" onclick="window.print()">Download PDF</button>
+  </div>
+  <div class="sheet">
+    <div class="head">
+      <div>
+        <h1 class="title">Invoice</h1>
+        <p class="inv-no">${escapeHtml(numberLabel)}</p>
+      </div>
+      ${logoBlock}
+    </div>
+    <hr class="divider" />
+
+    <div class="meta">
+      <div class="dates">
+        <div>
+          <p class="muted">Issued Date</p>
+          <strong>${escapeHtml(formatDate(invoice.issue_date))}</strong>
+        </div>
+        <div>
+          <p class="muted">Due Date</p>
+          <strong>${escapeHtml(formatDate(invoice.due_date))}</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="parties">
+      <div>
+        <p class="muted">From</p>
+        <p class="name">${escapeHtml(companyName)}</p>
+        ${fromDetails}
+      </div>
+      <div>
+        <p class="muted">To</p>
+        <p class="name">${escapeHtml(billName)}</p>
+        ${toDetails}
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="num">Units</th>
+          <th class="num">Price</th>
+          <th class="num">GST</th>
+          <th class="num">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows || '<tr><td colspan="5">No line items</td></tr>'}
+        <tr class="total-row">
+          <td colspan="4">Total Amount</td>
+          <td class="num">${escapeHtml(formatCurrency(total, currency))}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    ${noteText ? `<div class="note">${escapeHtml(noteText)}</div>` : ''}
+
+    <div class="foot">
+      <div class="pay">
+        <h4>Payment Method</h4>
+        ${paymentDetails}
+      </div>
+      <div class="sign">
+        ${qrBlock}
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export const publicRoutes = new Hono<{ Bindings: Env }>();
+
+publicRoutes.get('/invoices/:id', async (c) => {
+  const id = Number(c.req.param('id'));
+  const token = c.req.query('t') ?? '';
+
+  if (!Number.isFinite(id) || !token) {
+    return c.html('<h1>Invalid invoice link</h1>', 400);
+  }
+
+  const secret = c.env.API_SECRET;
+  if (!secret || !(await verifyInvoiceShareToken(secret, id, token))) {
+    return c.html('<h1>This invoice link is invalid or has expired.</h1>', 403);
+  }
+
+  const invoice = await c.env.DB.prepare(
+    `SELECT i.*, c.name as client_name, c.company as client_company,
+            c.email as client_email, c.phone as client_phone,
+            c.address as client_address, c.city as client_city,
+            c.state as client_state, c.zip as client_zip
+     FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.id = ?`
+  )
+    .bind(id)
+    .first<PublicInvoice>();
+
+  if (!invoice) return c.html('<h1>Invoice not found</h1>', 404);
+
+  const { results: items } = await c.env.DB.prepare(
+    'SELECT * FROM invoice_items WHERE invoice_id = ?'
+  )
+    .bind(id)
+    .all<InvoiceItem>();
+
+  const from =
+    (await c.env.DB.prepare('SELECT * FROM user_profile WHERE id = 1').first<UserProfile>()) ?? {
+      name: 'Client CRM',
+      email: 'admin@crm.local',
+      role: 'Admin',
+      default_currency: 'USD',
+    };
+
+  let qrDataUrl: string | null = null;
+  try {
+    qrDataUrl = await QRCode.toDataURL(c.req.url, {
+      width: 200,
+      margin: 1,
+      color: { dark: '#111111', light: '#ffffff' },
+    });
+  } catch {
+    qrDataUrl = null;
+  }
+
+  return c.html(renderInvoicePage({ invoice, items, from, qrDataUrl }));
+});

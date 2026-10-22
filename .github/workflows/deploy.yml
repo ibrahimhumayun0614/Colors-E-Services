@@ -1,0 +1,184 @@
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: 'Apply D1 schema (schema.sql)'
+        required: false
+        type: boolean
+        default: false
+      load_demo_data:
+        description: 'Load demo data (seed.sql)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Build & Deploy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            schema:
+              - 'worker/schema.sql'
+            phase2:
+              - 'worker/migrations/002-phase2-phase3.sql'
+            profile:
+              - 'worker/migrations/003-user-profile.sql'
+            currency:
+              - 'worker/migrations/004-service-currency.sql'
+            letterhead:
+              - 'worker/migrations/007-invoice-letterhead.sql'
+            paymentInfo:
+              - 'worker/migrations/008-invoice-payment-info.sql'
+            bankAccounts:
+              - 'worker/migrations/009-bank-accounts.sql'
+            invoicePaymentAccount:
+              - 'worker/migrations/010-invoice-payment-account.sql'
+            repair:
+              - 'worker/migrations/005-repair-login-attempts.sql'
+            defaultCurrency:
+              - 'worker/migrations/006-default-currency.sql'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install worker dependencies
+        working-directory: worker
+        run: npm install
+
+      - name: Run D1 phase 2/3 migration
+        if: steps.changes.outputs.phase2 == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./migrations/002-phase2-phase3.sql
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run D1 user profile migration
+        if: steps.changes.outputs.profile == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./migrations/003-user-profile.sql
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run D1 service currency migration
+        if: steps.changes.outputs.currency == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./migrations/004-service-currency.sql
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run D1 repair (login_attempts)
+        if: steps.changes.outputs.repair == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./migrations/005-repair-login-attempts.sql
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run D1 default currency migration
+        if: steps.changes.outputs.defaultCurrency == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./migrations/006-default-currency.sql
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run D1 invoice letterhead migration
+        if: steps.changes.outputs.letterhead == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./migrations/007-invoice-letterhead.sql
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run D1 invoice payment info migration
+        if: steps.changes.outputs.paymentInfo == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./migrations/008-invoice-payment-info.sql
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run D1 bank accounts migration
+        if: steps.changes.outputs.bankAccounts == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./migrations/009-bank-accounts.sql
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run D1 invoice payment account migration
+        if: steps.changes.outputs.invoicePaymentAccount == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./migrations/010-invoice-payment-account.sql
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run D1 migrations
+        if: steps.changes.outputs.schema == 'true' || (github.event_name == 'workflow_dispatch' && inputs.run_migrations)
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./schema.sql
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Load demo data
+        if: github.event_name == 'workflow_dispatch' && inputs.load_demo_data
+        working-directory: worker
+        run: npx wrangler d1 execute crm-db --remote --file=./seed.sql
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy API (Worker)
+        working-directory: worker
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm install
+
+      - name: Build frontend
+        working-directory: web
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.WORKER_API_URL }}
+
+      - name: Deploy frontend (Pages)
+        working-directory: web
+        run: npx wrangler pages deploy dist --project-name="${PAGES_PROJECT_NAME}" --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT_NAME: ${{ secrets.PAGES_PROJECT_NAME || 'crm-web' }}

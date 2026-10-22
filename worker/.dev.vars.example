@@ -1,0 +1,3 @@
+ALLOWED_ORIGINS=http://localhost:5173,https://crm-web-1np.pages.dev
+API_SECRET=your-local-password
+DISABLE_LOGIN_RATE_LIMIT=true

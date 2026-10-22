@@ -1,0 +1,2 @@
+# Replace REPLACE_WITH_YOUR_D1_DATABASE_ID in wrangler.toml before first deploy.
+# Get the ID from: Cloudflare Dashboard → D1 → crm-db → Database ID

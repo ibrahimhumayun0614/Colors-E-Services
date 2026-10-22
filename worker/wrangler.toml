@@ -1,0 +1,17 @@
+name = "crm-app"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "crm-db"
+database_id = "94190e80-212f-4a5a-889c-c14a422947fd"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.sql"]
+fallthrough = true
+
+[vars]
+# Set API_SECRET via: wrangler secret put API_SECRET
+ALLOWED_ORIGINS = "https://crm-web-1np.pages.dev,http://localhost:5173"
