@@ -470,7 +470,7 @@ export function SettingsPage() {
     onSuccess: (result) => {
       queryClient.invalidateQueries();
       setImportFile(null);
-      const total = Object.values(result.imported).reduce((sum, n) => sum + n, 0);
+      const total = Object.values(result.imported).reduce((sum, n) => sum + (n ?? 0), 0);
       toast.success(
         result.mode === 'replace'
           ? `Data restored — ${total} records imported`
@@ -484,6 +484,7 @@ export function SettingsPage() {
     const c = file.counts ?? {};
     const parts = [
       [c.clients, 'clients'],
+      [c.products, 'products'],
       [c.services, 'services'],
       [c.invoices, 'invoices'],
       [c.tasks, 'tasks'],

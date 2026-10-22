@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { Env, Client, Service, Invoice, InvoiceItem, Task } from '../types';
+import type { Env, Client, Service, Invoice, InvoiceItem, Task, Product } from '../types';
 import { nextInvoiceNumber } from '../lib/invoices';
 
 export const data = new Hono<{ Bindings: Env }>();
@@ -17,6 +17,7 @@ interface ExportPayload {
     invoices: Invoice[];
     invoice_items: InvoiceItem[];
     tasks: Task[];
+    products?: Product[];
   };
 }
 
@@ -26,12 +27,13 @@ async function selectAll<T>(db: D1Database, table: string): Promise<T[]> {
 }
 
 data.get('/export', async (c) => {
-  const [clients, services, invoices, invoice_items, tasks] = await Promise.all([
+  const [clients, services, invoices, invoice_items, tasks, products] = await Promise.all([
     selectAll<Client>(c.env.DB, 'clients'),
     selectAll<Service>(c.env.DB, 'services'),
     selectAll<Invoice>(c.env.DB, 'invoices'),
     selectAll<InvoiceItem>(c.env.DB, 'invoice_items'),
     selectAll<Task>(c.env.DB, 'tasks'),
+    selectAll<Product>(c.env.DB, 'products'),
   ]);
 
   const payload: ExportPayload = {
@@ -44,8 +46,9 @@ data.get('/export', async (c) => {
       invoices: invoices.length,
       invoice_items: invoice_items.length,
       tasks: tasks.length,
+      products: products.length,
     },
-    data: { clients, services, invoices, invoice_items, tasks },
+    data: { clients, services, invoices, invoice_items, tasks, products },
   };
 
   return c.json(payload);
@@ -72,25 +75,30 @@ data.post('/import', async (c) => {
   const invoices = asArray<Invoice>(source?.invoices);
   const invoiceItems = asArray<InvoiceItem>(source?.invoice_items);
   const tasks = asArray<Task>(source?.tasks);
+  const hasProducts = Array.isArray(source?.products);
+  const products = asArray<Product>(source?.products);
 
   if (
     clients.length === 0 &&
     services.length === 0 &&
     invoices.length === 0 &&
     invoiceItems.length === 0 &&
-    tasks.length === 0
+    tasks.length === 0 &&
+    products.length === 0
   ) {
     return c.json({ error: 'Import file contains no records.' }, 400);
   }
 
   const mode: ImportMode = body.mode === 'replace' ? 'replace' : 'merge';
   const db = c.env.DB;
+  const importData: ImportData = { clients, services, invoices, invoiceItems, tasks, products, hasProducts };
 
+  let productsImported = products.length;
   try {
     if (mode === 'replace') {
-      await importReplace(db, { clients, services, invoices, invoiceItems, tasks });
+      await importReplace(db, importData);
     } else {
-      await importMerge(db, { clients, services, invoices, invoiceItems, tasks });
+      productsImported = await importMerge(db, importData);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Import failed.';
@@ -106,6 +114,7 @@ data.post('/import', async (c) => {
       invoices: invoices.length,
       invoice_items: invoiceItems.length,
       tasks: tasks.length,
+      products: productsImported,
     },
   });
 });
@@ -116,6 +125,13 @@ interface ImportData {
   invoices: Invoice[];
   invoiceItems: InvoiceItem[];
   tasks: Task[];
+  products: Product[];
+  /** Older backups have no products key; replace mode must not wipe the catalog for those. */
+  hasProducts: boolean;
+}
+
+function productActive(p: Product): number {
+  return p.is_active === 0 || p.is_active === false ? 0 : 1;
 }
 
 /** Wipe all data and restore the export exactly, preserving original IDs. Runs atomically. */
@@ -127,13 +143,36 @@ async function importReplace(db: D1Database, d: ImportData): Promise<void> {
     db.prepare('DELETE FROM services'),
     db.prepare('DELETE FROM clients'),
   ];
+  if (d.hasProducts) statements.push(db.prepare('DELETE FROM products'));
+
+  for (const p of d.products) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO products (id, serial_number, name, description, sku, unit_price, currency, is_active, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          p.id,
+          p.serial_number ?? null,
+          p.name,
+          p.description ?? null,
+          p.sku ?? null,
+          p.unit_price ?? 0,
+          p.currency ?? 'INR',
+          productActive(p),
+          p.created_at ?? new Date().toISOString(),
+          p.updated_at ?? new Date().toISOString()
+        )
+    );
+  }
 
   for (const cl of d.clients) {
     statements.push(
       db
         .prepare(
-          `INSERT INTO clients (id, name, company, email, phone, status, notes, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO clients (id, name, company, email, phone, address, city, state, zip, status, notes, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           cl.id,
@@ -141,6 +180,10 @@ async function importReplace(db: D1Database, d: ImportData): Promise<void> {
           cl.company ?? null,
           cl.email ?? null,
           cl.phone ?? null,
+          cl.address ?? null,
+          cl.city ?? null,
+          cl.state ?? null,
+          cl.zip ?? null,
           cl.status ?? 'active',
           cl.notes ?? null,
           cl.created_at ?? new Date().toISOString(),
@@ -192,8 +235,8 @@ async function importReplace(db: D1Database, d: ImportData): Promise<void> {
     statements.push(
       db
         .prepare(
-          `INSERT INTO invoices (id, client_id, invoice_number, issue_date, due_date, status, tax_rate, currency, notes, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO invoices (id, client_id, invoice_number, issue_date, due_date, status, tax_rate, currency, notes, bank_account_index, payment_account, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           inv.id,
@@ -205,6 +248,8 @@ async function importReplace(db: D1Database, d: ImportData): Promise<void> {
           inv.tax_rate ?? 0,
           inv.currency ?? 'USD',
           inv.notes ?? null,
+          inv.bank_account_index ?? 0,
+          inv.payment_account ?? null,
           inv.created_at ?? new Date().toISOString(),
           inv.updated_at ?? new Date().toISOString()
         )
@@ -215,8 +260,8 @@ async function importReplace(db: D1Database, d: ImportData): Promise<void> {
     statements.push(
       db
         .prepare(
-          `INSERT INTO invoice_items (id, invoice_id, service_id, description, quantity, rate)
-           VALUES (?, ?, ?, ?, ?, ?)`
+          `INSERT INTO invoice_items (id, invoice_id, service_id, description, quantity, rate, line_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
         )
         .bind(
           it.id,
@@ -224,7 +269,8 @@ async function importReplace(db: D1Database, d: ImportData): Promise<void> {
           it.service_id ?? null,
           it.description,
           it.quantity ?? 1,
-          it.rate ?? 0
+          it.rate ?? 0,
+          it.line_date ?? null
         )
     );
   }
@@ -255,23 +301,63 @@ async function importReplace(db: D1Database, d: ImportData): Promise<void> {
   await db.batch(statements);
 }
 
-/** Append imported records with fresh IDs, remapping all foreign keys. */
-async function importMerge(db: D1Database, d: ImportData): Promise<void> {
+/** Append imported records with fresh IDs, remapping all foreign keys. Returns products added. */
+async function importMerge(db: D1Database, d: ImportData): Promise<number> {
   const clientIdMap = new Map<number, number>();
   const serviceIdMap = new Map<number, number>();
   const invoiceIdMap = new Map<number, number>();
 
+  const { results: existingProducts } = await db
+    .prepare('SELECT name, serial_number FROM products')
+    .all<{ name: string; serial_number: string | null }>();
+  const takenNames = new Set(existingProducts.map((p) => p.name.trim().toLowerCase()));
+  const takenSerials = new Set(
+    existingProducts.map((p) => p.serial_number?.trim()).filter((s): s is string => !!s)
+  );
+
+  let productsAdded = 0;
+  for (const p of d.products) {
+    const nameKey = p.name.trim().toLowerCase();
+    if (takenNames.has(nameKey)) continue;
+    const serial = p.serial_number?.trim() || null;
+    const safeSerial = serial && !takenSerials.has(serial) ? serial : null;
+    await db
+      .prepare(
+        `INSERT INTO products (serial_number, name, description, sku, unit_price, currency, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        safeSerial,
+        p.name,
+        p.description ?? null,
+        p.sku ?? null,
+        p.unit_price ?? 0,
+        p.currency ?? 'INR',
+        productActive(p),
+        p.created_at ?? new Date().toISOString(),
+        p.updated_at ?? new Date().toISOString()
+      )
+      .run();
+    takenNames.add(nameKey);
+    if (safeSerial) takenSerials.add(safeSerial);
+    productsAdded += 1;
+  }
+
   for (const cl of d.clients) {
     const res = await db
       .prepare(
-        `INSERT INTO clients (name, company, email, phone, status, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO clients (name, company, email, phone, address, city, state, zip, status, notes, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         cl.name,
         cl.company ?? null,
         cl.email ?? null,
         cl.phone ?? null,
+        cl.address ?? null,
+        cl.city ?? null,
+        cl.state ?? null,
+        cl.zip ?? null,
         cl.status ?? 'active',
         cl.notes ?? null,
         cl.created_at ?? new Date().toISOString(),
@@ -328,8 +414,8 @@ async function importMerge(db: D1Database, d: ImportData): Promise<void> {
     const invoiceNumber = await nextInvoiceNumber(db);
     const res = await db
       .prepare(
-        `INSERT INTO invoices (client_id, invoice_number, issue_date, due_date, status, tax_rate, currency, notes, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO invoices (client_id, invoice_number, issue_date, due_date, status, tax_rate, currency, notes, bank_account_index, payment_account, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .bind(
         newClientId,
@@ -340,6 +426,8 @@ async function importMerge(db: D1Database, d: ImportData): Promise<void> {
         inv.tax_rate ?? 0,
         inv.currency ?? 'USD',
         inv.notes ?? null,
+        inv.bank_account_index ?? 0,
+        inv.payment_account ?? null,
         inv.created_at ?? new Date().toISOString(),
         inv.updated_at ?? new Date().toISOString()
       )
@@ -353,10 +441,17 @@ async function importMerge(db: D1Database, d: ImportData): Promise<void> {
     const newServiceId = it.service_id != null ? serviceIdMap.get(it.service_id) ?? null : null;
     await db
       .prepare(
-        `INSERT INTO invoice_items (invoice_id, service_id, description, quantity, rate)
-         VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO invoice_items (invoice_id, service_id, description, quantity, rate, line_date)
+         VALUES (?, ?, ?, ?, ?, ?)`
       )
-      .bind(newInvoiceId, newServiceId, it.description, it.quantity ?? 1, it.rate ?? 0)
+      .bind(
+        newInvoiceId,
+        newServiceId,
+        it.description,
+        it.quantity ?? 1,
+        it.rate ?? 0,
+        it.line_date ?? null
+      )
       .run();
   }
 
@@ -382,4 +477,6 @@ async function importMerge(db: D1Database, d: ImportData): Promise<void> {
       )
       .run();
   }
+
+  return productsAdded;
 }

@@ -404,6 +404,7 @@ export interface ExportFile {
     invoices: Invoice[];
     invoice_items: InvoiceItem[];
     tasks: Task[];
+    products?: Product[];
   };
 }
 
@@ -416,6 +417,7 @@ export interface ImportResult {
     invoices: number;
     invoice_items: number;
     tasks: number;
+    products?: number;
   };
 }
 
