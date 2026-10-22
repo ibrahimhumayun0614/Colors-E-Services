@@ -219,7 +219,9 @@ services.post('/:id/renew', async (c) => {
 
 services.post('/:id/complete-maintenance', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{ complete_tasks?: boolean }>().catch(() => ({}));
+  const body = await c.req
+    .json<{ complete_tasks?: boolean }>()
+    .catch((): { complete_tasks?: boolean } => ({}));
 
   const service = await loadService(c.env.DB, id);
   if (!service) return c.json({ error: 'Service not found' }, 404);
@@ -245,12 +247,13 @@ services.post('/:id/complete-maintenance', async (c) => {
 
 services.post('/:id/create-task', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{
+  type CreateTaskBody = {
     target?: RenewalTarget;
     title?: string;
     due_date?: string;
     priority?: string;
-  }>().catch(() => ({}));
+  };
+  const body = await c.req.json<CreateTaskBody>().catch((): CreateTaskBody => ({}));
 
   const service = await loadService(c.env.DB, id);
   if (!service) return c.json({ error: 'Service not found' }, 404);
@@ -321,7 +324,9 @@ services.post('/:id/create-task', async (c) => {
 
 services.post('/:id/create-invoice', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json<{ due_days?: number; status?: string }>().catch(() => ({}));
+  const body = await c.req
+    .json<{ due_days?: number; status?: string }>()
+    .catch((): { due_days?: number; status?: string } => ({}));
 
   const service = await loadService(c.env.DB, id);
   if (!service) return c.json({ error: 'Service not found' }, 404);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { CalendarDays, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { api, type Client, type Invoice, type Product, type Service, type UserProfile } from '@/lib/api';
 import { getUserProfile, setUserProfile } from '@/lib/auth';
 import {
@@ -832,14 +832,6 @@ export function InvoiceBuilder({
                     onChange={(e) => setCompany({ ...company, phone: e.target.value })}
                   />
                 </Field>
-                <Field label="Website">
-                  <Input
-                    className={inputClass}
-                    value={company.website}
-                    onChange={(e) => setCompany({ ...company, website: e.target.value })}
-                    placeholder="www.example.com"
-                  />
-                </Field>
                 <Field label="Tax ID">
                   <Input
                     className={inputClass}
@@ -1087,8 +1079,7 @@ export function InvoiceBuilder({
               </div>
             </div>
             <div className="space-y-3">
-              <div className="hidden gap-2 px-0.5 text-[11px] font-medium text-muted-foreground sm:grid sm:grid-cols-[2.25rem_8.5rem_1fr_4.5rem_6.5rem_2.25rem]">
-                <span className="text-center">S.No</span>
+              <div className="hidden gap-2 px-0.5 text-[11px] font-medium text-muted-foreground sm:grid sm:grid-cols-[7.25rem_minmax(10rem,1fr)_4.5rem_5rem_2.25rem]">
                 <span>Date</span>
                 <span>Description</span>
                 <span className="text-right">Qty</span>
@@ -1098,20 +1089,20 @@ export function InvoiceBuilder({
               {items.map((item, index) => (
                 <div
                   key={index}
-                  className="grid gap-2 sm:grid-cols-[2.25rem_8.5rem_1fr_4.5rem_6.5rem_2.25rem] sm:items-center"
+                  className="grid gap-2 sm:grid-cols-[7.25rem_minmax(10rem,1fr)_4.5rem_5rem_2.25rem] sm:items-center"
                 >
-                  <span
-                    className="flex h-9 items-center justify-center text-sm tabular-nums text-muted-foreground"
-                    aria-hidden
-                  >
-                    {index + 1}
-                  </span>
-                  <Input
-                    className={inputClass}
-                    type="date"
-                    value={item.line_date || issueDate}
-                    onChange={(e) => updateItem(index, { line_date: e.target.value })}
-                  />
+                  <div className="relative">
+                    <Input
+                      className={cn(inputClass, 'line-date-input relative pl-2.5 pr-7 text-[13px]')}
+                      type="date"
+                      value={item.line_date || issueDate}
+                      onChange={(e) => updateItem(index, { line_date: e.target.value })}
+                    />
+                    <CalendarDays
+                      className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                      aria-hidden
+                    />
+                  </div>
                   {catalogProducts.length > 0 ? (
                     <ProductLineDescriptionInput
                       value={item.description}

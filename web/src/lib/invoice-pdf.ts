@@ -86,7 +86,6 @@ function buildInvoiceHtml(
     profile.tax_id ? `<p>ABN ${escapeHtml(profile.tax_id)}</p>` : '',
     profile.email ? `<p>${escapeHtml(profile.email)}</p>` : '',
     profile.phone ? `<p>${escapeHtml(profile.phone)}</p>` : '',
-    profile.website ? `<p>${escapeHtml(profile.website)}</p>` : '',
   ].join('');
 
   const toDetails = [
@@ -125,7 +124,6 @@ function buildInvoiceHtml(
   const rows = items
     .map((item, index) => {
       const line = item.quantity * item.rate;
-      const lineTax = line * (taxRate / 100);
       const lineDate = formatDate(item.line_date?.trim() || invoice.issue_date);
       return `
         <tr>
@@ -134,7 +132,6 @@ function buildInvoiceHtml(
           <td class="desc">${escapeHtml(stripCatalogSerialPrefix(item.description))}</td>
           <td class="num">${escapeHtml(item.quantity)}</td>
           <td class="num">${escapeHtml(formatCurrency(item.rate, currency))}</td>
-          <td class="num">${escapeHtml(formatCurrency(lineTax, currency))}</td>
           <td class="num amount">${escapeHtml(formatCurrency(line, currency))}</td>
         </tr>`;
     })
@@ -169,6 +166,7 @@ function buildInvoiceHtml(
     .parties{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:14px}
     .parties .name{font-weight:700;margin:4px 0 2px;font-size:12.5px}
     .parties p{margin:1px 0;color:#000;font-size:11.5px}
+    .parties .bill-to{text-align:right}
     table{width:100%;border-collapse:collapse;margin-top:16px;border:1px solid #555}
     thead th{background:#ececec;text-align:left;padding:7px 10px;font-size:10.5px;font-weight:700;color:#000;border-bottom:1px solid #555}
     th.num,td.num{text-align:right}
@@ -221,7 +219,7 @@ function buildInvoiceHtml(
         <p class="name">${escapeHtml(companyName)}</p>
         ${fromDetails}
       </div>
-      <div>
+      <div class="bill-to">
         <p class="muted">To</p>
         <p class="name">${escapeHtml(billName)}</p>
         ${toDetails}
@@ -236,18 +234,17 @@ function buildInvoiceHtml(
           <th>Description</th>
           <th class="num">Units</th>
           <th class="num">Price</th>
-          <th class="num">GST</th>
           <th class="num">Amount</th>
         </tr>
       </thead>
       <tbody>
-        ${rows || '<tr><td colspan="7">No line items</td></tr>'}
+        ${rows || '<tr><td colspan="6">No line items</td></tr>'}
         <tr class="total-row">
-          <td colspan="6">Total Amount</td>
+          <td colspan="5">Total Amount</td>
           <td class="num">${escapeHtml(formatCurrency(total, currency))}</td>
         </tr>
         <tr class="words-row">
-          <td colspan="7"><span>Amount in words:</span> ${escapeHtml(amountInWords(total, currency))}</td>
+          <td colspan="6"><span>Amount in words:</span> ${escapeHtml(amountInWords(total, currency))}</td>
         </tr>
       </tbody>
     </table>

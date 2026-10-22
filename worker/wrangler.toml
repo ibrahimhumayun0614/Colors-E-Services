@@ -14,4 +14,4 @@ fallthrough = true
 
 [vars]
 # Set API_SECRET via: wrangler secret put API_SECRET
-ALLOWED_ORIGINS = "https://crm-web-1np.pages.dev,http://localhost:5173"
+ALLOWED_ORIGINS = "https://ccs-invoice.pages.dev,https://crm-web-1np.pages.dev,http://localhost:5173"

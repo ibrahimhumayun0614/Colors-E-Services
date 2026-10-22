@@ -8,7 +8,7 @@
     "db:migrate:local": "wrangler d1 execute crm-db --local --file=./schema.sql",
     "db:migrate:remote": "wrangler d1 execute crm-db --remote --file=./schema.sql",
     "build:web": "npm run build --prefix ../web",
-    "deploy:live": "npm run deploy && npm run build:web && npx wrangler pages deploy ../web/dist --project-name=crm-web --commit-dirty=true"
+    "deploy:live": "npm run deploy && npm run build:web && npx wrangler pages deploy ../web/dist --project-name=ccs-invoice --branch=main --commit-dirty=true"
   },
   "dependencies": {
     "hono": "^4.7.5",

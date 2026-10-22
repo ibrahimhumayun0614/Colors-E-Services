@@ -337,23 +337,16 @@ export function InvoiceDocumentPreview({
                   placeholder="Phone"
                   className="text-[12px] text-black"
                 />
-                <GhostInput
-                  readOnly={ro}
-                  value={company.website}
-                  onChange={(e) => handlers.onCompanyChange?.({ website: e.target.value })}
-                  placeholder="Website"
-                  className="text-[12px] text-black"
-                />
               </div>
             </div>
-            <div>
+            <div className="text-right">
               <p className="text-[11px] text-black">To</p>
               <GhostInput
                 readOnly={ro}
                 value={client.name}
                 onChange={(e) => handlers.onClientChange?.({ name: e.target.value })}
                 placeholder="Client name"
-                className="mt-2 font-semibold"
+                className="mt-2 text-right font-semibold"
               />
               <div className="mt-1 space-y-0.5 text-[12px] text-black">
                 <GhostInput
@@ -361,29 +354,29 @@ export function InvoiceDocumentPreview({
                   value={client.address}
                   onChange={(e) => handlers.onClientChange?.({ address: e.target.value })}
                   placeholder="Address"
-                  className="text-[12px] text-black"
+                  className="text-right text-[12px] text-black"
                 />
-                <div className="flex gap-1">
+                <div className="flex justify-end gap-1">
                   <GhostInput
                     readOnly={ro}
                     value={client.city}
                     onChange={(e) => handlers.onClientChange?.({ city: e.target.value })}
                     placeholder="City"
-                    className="text-[12px] text-black"
+                    className="w-auto min-w-[4ch] text-right text-[12px] text-black field-sizing-content"
                   />
                   <GhostInput
                     readOnly={ro}
                     value={client.state}
                     onChange={(e) => handlers.onClientChange?.({ state: e.target.value })}
                     placeholder="State"
-                    className="text-[12px] text-black"
+                    className="w-auto min-w-[4ch] text-right text-[12px] text-black field-sizing-content"
                   />
                   <GhostInput
                     readOnly={ro}
                     value={client.zip}
                     onChange={(e) => handlers.onClientChange?.({ zip: e.target.value })}
                     placeholder="ZIP"
-                    className="w-20 text-[12px] text-black"
+                    className="w-auto min-w-[3ch] text-right text-[12px] text-black field-sizing-content"
                   />
                 </div>
                 <GhostInput
@@ -391,14 +384,14 @@ export function InvoiceDocumentPreview({
                   value={client.email}
                   onChange={(e) => handlers.onClientChange?.({ email: e.target.value })}
                   placeholder="Email"
-                  className="text-[12px] text-black"
+                  className="text-right text-[12px] text-black"
                 />
                 <GhostInput
                   readOnly={ro}
                   value={client.phone}
                   onChange={(e) => handlers.onClientChange?.({ phone: e.target.value })}
                   placeholder="Phone"
-                  className="text-[12px] text-black"
+                  className="text-right text-[12px] text-black"
                 />
               </div>
             </div>
@@ -408,23 +401,21 @@ export function InvoiceDocumentPreview({
           <div className="mt-10 overflow-hidden rounded-lg border border-neutral-500">
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className="w-[5%]" />
+                {canEdit ? null : <col className="w-[5%]" />}
                 <col className="w-[12%]" />
-                <col className={canEdit ? 'w-[26%]' : 'w-[30%]'} />
+                <col className={canEdit ? 'w-[41%]' : 'w-[40%]'} />
                 <col className="w-[9%]" />
                 <col className="w-[12%]" />
-                <col className="w-[10%]" />
                 <col className="w-[12%]" />
                 {canEdit ? <col className="w-[6%]" /> : null}
               </colgroup>
               <thead>
                 <tr className="border-b border-neutral-500 bg-neutral-200 text-[11px] text-black">
-                  <th className="px-2 py-3 text-center font-bold">S.No</th>
+                  {canEdit ? null : <th className="px-2 py-3 text-center font-bold">S.No</th>}
                   <th className="px-2 py-3 text-left font-bold">Date</th>
                   <th className="px-3 py-3 text-left font-bold">Description</th>
                   <th className="px-2 py-3 text-right font-bold">Units</th>
                   <th className="px-2 py-3 text-right font-bold">Price</th>
-                  <th className="px-2 py-3 text-right font-bold">GST</th>
                   <th className="px-2 py-3 text-right font-bold">Amount</th>
                   {canEdit ? <th className="px-1 py-3" aria-hidden /> : null}
                 </tr>
@@ -432,13 +423,14 @@ export function InvoiceDocumentPreview({
               <tbody>
                 {displayItems.map((item, index) => {
                   const line = item.quantity * item.rate;
-                  const lineTax = line * (taxRate / 100);
                   const descriptionDisplay = stripCatalogSerialPrefix(item.description);
                   return (
                     <tr key={index} className="border-t border-neutral-400">
-                      <td className="px-2 py-2.5 text-center align-middle tabular-nums font-medium">
-                        {index + 1}
-                      </td>
+                      {canEdit ? null : (
+                        <td className="px-2 py-2.5 text-center align-middle tabular-nums font-medium">
+                          {index + 1}
+                        </td>
+                      )}
                       <td className="px-2 py-2.5 align-middle">
                         {canEdit ? (
                           <GhostInput
@@ -512,9 +504,6 @@ export function InvoiceDocumentPreview({
                           className="w-full text-right tabular-nums text-black"
                         />
                       </td>
-                      <td className="px-3 py-2.5 text-right align-middle tabular-nums text-black">
-                        {money(lineTax)}
-                      </td>
                       <td className="px-3 py-2.5 text-right align-middle tabular-nums font-semibold">
                         {money(line)}
                       </td>
@@ -538,7 +527,7 @@ export function InvoiceDocumentPreview({
               {canEdit ? (
                 <tfoot>
                   <tr className="border-t border-neutral-400">
-                    <td colSpan={8} className="px-4 py-2">
+                    <td colSpan={6} className="px-4 py-2">
                       <button
                         type="button"
                         onClick={() => handlers.onAddItem?.()}

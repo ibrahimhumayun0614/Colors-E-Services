@@ -99,7 +99,6 @@ function renderInvoicePage(opts: {
     from.tax_id ? `<p>ABN ${escapeHtml(from.tax_id)}</p>` : '',
     from.email ? `<p>${escapeHtml(from.email)}</p>` : '',
     from.phone ? `<p>${escapeHtml(from.phone)}</p>` : '',
-    from.website ? `<p>${escapeHtml(from.website)}</p>` : '',
   ].join('');
 
   const toDetails = [
@@ -121,7 +120,6 @@ function renderInvoicePage(opts: {
   const rows = items
     .map((item, index) => {
       const line = item.quantity * item.rate;
-      const lineTax = line * (taxRate / 100);
       const lineDate = formatDate(item.line_date?.trim() || invoice.issue_date);
       return `
         <tr>
@@ -130,7 +128,6 @@ function renderInvoicePage(opts: {
           <td class="desc">${escapeHtml(stripCatalogSerialPrefix(item.description))}</td>
           <td class="num">${escapeHtml(item.quantity)}</td>
           <td class="num">${escapeHtml(formatCurrency(item.rate, currency))}</td>
-          <td class="num">${escapeHtml(formatCurrency(lineTax, currency))}</td>
           <td class="num amount">${escapeHtml(formatCurrency(line, currency))}</td>
         </tr>`;
     })
@@ -168,6 +165,7 @@ function renderInvoicePage(opts: {
     .parties{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:36px}
     .parties .name{font-weight:700;margin:8px 0 4px;font-size:13px}
     .parties p{margin:1px 0;color:#000;font-size:12px}
+    .parties .bill-to{text-align:right}
     table{width:100%;border-collapse:collapse;margin-top:36px;border:1px solid #555}
     thead th{background:#ececec;text-align:left;padding:12px 14px;font-size:11px;font-weight:700;color:#000;border-bottom:1px solid #555}
     th.num,td.num{text-align:right}
@@ -269,7 +267,7 @@ function renderInvoicePage(opts: {
         <p class="name">${escapeHtml(companyName)}</p>
         ${fromDetails}
       </div>
-      <div>
+      <div class="bill-to">
         <p class="muted">To</p>
         <p class="name">${escapeHtml(billName)}</p>
         ${toDetails}
@@ -284,18 +282,17 @@ function renderInvoicePage(opts: {
           <th>Description</th>
           <th class="num">Units</th>
           <th class="num">Price</th>
-          <th class="num">GST</th>
           <th class="num">Amount</th>
         </tr>
       </thead>
       <tbody>
-        ${rows || '<tr><td colspan="7">No line items</td></tr>'}
+        ${rows || '<tr><td colspan="6">No line items</td></tr>'}
         <tr class="total-row">
-          <td colspan="6">Total Amount</td>
+          <td colspan="5">Total Amount</td>
           <td class="num">${escapeHtml(formatCurrency(total, currency))}</td>
         </tr>
         <tr class="words-row">
-          <td colspan="7"><span>Amount in words:</span> ${escapeHtml(amountInWords(total, currency))}</td>
+          <td colspan="6"><span>Amount in words:</span> ${escapeHtml(amountInWords(total, currency))}</td>
         </tr>
       </tbody>
     </table>

@@ -551,3 +551,24 @@
 .product-datalist-input[list]::-webkit-calendar-picker-indicator {
   display: none;
 }
+
+.line-date-input {
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.line-date-input::-webkit-datetime-edit {
+  padding: 0;
+}
+
+/* Native icon becomes an invisible full-size click target; a custom icon is drawn on top */
+.line-date-input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
