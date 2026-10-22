@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   description TEXT NOT NULL,
   quantity REAL NOT NULL DEFAULT 1,
   rate REAL NOT NULL DEFAULT 0,
+  line_date TEXT,
   FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
   FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE SET NULL
 );

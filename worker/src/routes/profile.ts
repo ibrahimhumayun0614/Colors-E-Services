@@ -8,6 +8,7 @@ import {
   type BankAccount,
 } from '../lib/bank-accounts';
 import { SHOP_BILLING_DEFAULTS } from '../lib/shop-defaults';
+import { DEFAULT_LOGO_DATA_URL } from '../lib/default-logo';
 
 const PROFILE_ID = 1;
 
@@ -42,7 +43,7 @@ function mapProfile(row: Record<string, unknown> | null): UserProfile {
     state: str(row, 'state') ?? SHOP_BILLING_DEFAULTS.state,
     zip: str(row, 'zip') ?? SHOP_BILLING_DEFAULTS.zip,
     tax_id: str(row, 'tax_id'),
-    logo_data: str(row, 'logo_data'),
+    logo_data: str(row, 'logo_data') ?? DEFAULT_LOGO_DATA_URL,
     website: str(row, 'website'),
     bank_account: primary.bank_account ?? legacy.bank_account,
     bank_name: primary.bank_name ?? legacy.bank_name,

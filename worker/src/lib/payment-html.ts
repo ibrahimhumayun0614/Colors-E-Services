@@ -11,6 +11,10 @@ function escapeHtml(s: string) {
     .replace(/"/g, '&quot;');
 }
 
+export function paymentMethodLabel(from: { payment_method?: string | null }): string {
+  return from.payment_method?.trim() || 'EFT Bank Transfer';
+}
+
 /** Payment block HTML for one or more bank accounts. */
 export function paymentDetailsHtml(
   from: {
@@ -25,26 +29,21 @@ export function paymentDetailsHtml(
   },
   companyNameFallback = 'Your Company'
 ): string {
-  const method = from.payment_method?.trim() || 'EFT Bank Transfer';
   const accounts = resolveBankAccounts(from.bank_accounts, from);
   const companyName = from.company_name?.trim() || companyNameFallback;
 
-  if (!accounts.length) {
-    return `<p>${escapeHtml(method)}</p>`;
-  }
+  if (!accounts.length) return '';
 
   const blocks = accounts.map((account, index) => {
     const accountName = account.bank_account_name.trim() || companyName;
-    const label =
-      account.label.trim() || (accounts.length > 1 ? `Account ${index + 1}` : '');
     const lines = [
-      label ? `<p><strong>${escapeHtml(label)}</strong></p>` : '',
-      index === 0 ? `<p>${escapeHtml(method)}</p>` : '',
-      `<p>Account Name: ${escapeHtml(accountName)}</p>`,
-      account.bank_ifsc ? `<p>Code: ${escapeHtml(account.bank_ifsc)}</p>` : '',
-      account.bank_account ? `<p>Account Number: ${escapeHtml(account.bank_account)}</p>` : '',
-      account.bank_name ? `<p>Bank: ${escapeHtml(account.bank_name)}</p>` : '',
-      account.upi_id ? `<p>UPI: ${escapeHtml(account.upi_id)}</p>` : '',
+      `<p class="bank-detail">Account Name: ${escapeHtml(accountName)}</p>`,
+      account.bank_ifsc ? `<p class="bank-detail">IFSC Code: ${escapeHtml(account.bank_ifsc)}</p>` : '',
+      account.bank_account
+        ? `<p class="bank-detail">Account Number: ${escapeHtml(account.bank_account)}</p>`
+        : '',
+      account.bank_name ? `<p class="bank-detail">Bank Name: ${escapeHtml(account.bank_name)}</p>` : '',
+      account.upi_id ? `<p class="bank-detail">UPI ID: ${escapeHtml(account.upi_id)}</p>` : '',
     ];
     return `<div class="bank-account"${index > 0 ? ' style="margin-top:12px"' : ''}>${lines.join('')}</div>`;
   });

@@ -4,6 +4,7 @@ import { getUserProfile, setUserProfile } from '@/lib/auth';
 import { pickInvoicePaymentAccounts } from '@/lib/bank-accounts';
 import { stripCatalogSerialPrefix } from '@/lib/product-catalog';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { amountInWords } from '@/lib/amount-words';
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -14,15 +15,36 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
-function addressLine(src: {
+function addressHtml(src: {
   address?: string | null;
   city?: string | null;
   state?: string | null;
   zip?: string | null;
 }): string {
-  return [src.address, [src.city, src.state, src.zip].filter(Boolean).join(', ')]
+  const t = (v?: string | null) => v?.trim() || '';
+  return [t(src.address), [t(src.city), t(src.state), t(src.zip)].filter(Boolean).join(', ')]
     .filter(Boolean)
-    .join(', ');
+    .map(escapeHtml)
+    .join('<br />');
+}
+
+const PRINT_MARGIN_MM = 10;
+const PRINT_WIDTH_MM = 210 - PRINT_MARGIN_MM * 2;
+const PRINT_HEIGHT_MM = 297 - PRINT_MARGIN_MM * 2;
+const PX_PER_MM = 96 / 25.4;
+
+/** Scale the sheet down when it would spill onto a second A4 page. */
+function fitToSinglePage(page: HTMLElement): void {
+  page.style.zoom = '';
+  const maxHeight = PRINT_HEIGHT_MM * PX_PER_MM - 4;
+  const height = page.scrollHeight;
+  if (height > maxHeight) page.style.zoom = String(maxHeight / height);
+}
+
+/** Print title, which browsers use as the saved PDF file name, e.g. "Colors Common Services - Invoice 2". */
+function invoiceDocumentTitle(companyName: string, invoiceNumber: string): string {
+  const digits = invoiceNumber.match(/\d+/)?.[0];
+  return `${companyName} - Invoice ${digits ? Number(digits) : invoiceNumber.replace(/^#/, '')}`;
 }
 
 function buildInvoiceHtml(
@@ -56,11 +78,11 @@ function buildInvoiceHtml(
     ? invoice.invoice_number
     : `#${invoice.invoice_number}`;
 
-  const fromAddress = addressLine(profile);
-  const toAddress = addressLine(client ?? {});
+  const fromAddress = addressHtml(profile);
+  const toAddress = addressHtml(client ?? {});
 
   const fromDetails = [
-    fromAddress ? `<p>${escapeHtml(fromAddress)}</p>` : '',
+    fromAddress ? `<p>${fromAddress}</p>` : '',
     profile.tax_id ? `<p>ABN ${escapeHtml(profile.tax_id)}</p>` : '',
     profile.email ? `<p>${escapeHtml(profile.email)}</p>` : '',
     profile.phone ? `<p>${escapeHtml(profile.phone)}</p>` : '',
@@ -68,7 +90,7 @@ function buildInvoiceHtml(
   ].join('');
 
   const toDetails = [
-    toAddress ? `<p>${escapeHtml(toAddress)}</p>` : '',
+    toAddress ? `<p>${toAddress}</p>` : '',
     client?.email ? `<p>${escapeHtml(client.email)}</p>` : '',
     client?.phone ? `<p>${escapeHtml(client.phone)}</p>` : '',
   ].join('');
@@ -77,35 +99,38 @@ function buildInvoiceHtml(
     ? accounts
         .map((account, index) => {
           const accountName = account.bank_account_name.trim() || companyName;
-          const label =
-            account.label.trim() || (accounts.length > 1 ? `Account ${index + 1}` : '');
           return [
             `<div class="bank-account"${index > 0 ? ' style="margin-top:12px"' : ''}>`,
-            label ? `<p><strong>${escapeHtml(label)}</strong></p>` : '',
-            index === 0 ? `<p>${escapeHtml(method)}</p>` : '',
-            `<p>Account Name: ${escapeHtml(accountName)}</p>`,
-            account.bank_ifsc ? `<p>Code: ${escapeHtml(account.bank_ifsc)}</p>` : '',
-            account.bank_account
-              ? `<p>Account Number: ${escapeHtml(account.bank_account)}</p>`
+            `<p class="bank-detail">Account Name: ${escapeHtml(accountName)}</p>`,
+            account.bank_ifsc
+              ? `<p class="bank-detail">IFSC Code: ${escapeHtml(account.bank_ifsc)}</p>`
               : '',
-            account.bank_name ? `<p>Bank: ${escapeHtml(account.bank_name)}</p>` : '',
-            account.upi_id ? `<p>UPI: ${escapeHtml(account.upi_id)}</p>` : '',
+            account.bank_account
+              ? `<p class="bank-detail">Account Number: ${escapeHtml(account.bank_account)}</p>`
+              : '',
+            account.bank_name
+              ? `<p class="bank-detail">Bank Name: ${escapeHtml(account.bank_name)}</p>`
+              : '',
+            account.upi_id ? `<p class="bank-detail">UPI ID: ${escapeHtml(account.upi_id)}</p>` : '',
             `</div>`,
           ].join('');
         })
         .join('')
-    : `<p>${escapeHtml(method)}</p>`;
+    : '';
 
   const logoBlock = profile.logo_data
     ? `<img class="logo" src="${escapeHtml(profile.logo_data)}" alt="" />`
     : '';
 
   const rows = items
-    .map((item) => {
+    .map((item, index) => {
       const line = item.quantity * item.rate;
       const lineTax = line * (taxRate / 100);
+      const lineDate = formatDate(item.line_date?.trim() || invoice.issue_date);
       return `
         <tr>
+          <td class="num sno">${index + 1}</td>
+          <td class="line-date">${escapeHtml(lineDate)}</td>
           <td class="desc">${escapeHtml(stripCatalogSerialPrefix(item.description))}</td>
           <td class="num">${escapeHtml(item.quantity)}</td>
           <td class="num">${escapeHtml(formatCurrency(item.rate, currency))}</td>
@@ -125,50 +150,55 @@ function buildInvoiceHtml(
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>${escapeHtml(invoice.invoice_number)}</title>
+  <title>${escapeHtml(invoiceDocumentTitle(companyName, invoice.invoice_number))}</title>
   <style>
     *{box-sizing:border-box}
     html,body{margin:0;padding:0;background:#fff}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#171717;font-size:13px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .page{max-width:760px;margin:0 auto;padding:44px 40px}
-    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
-    .title{font-size:40px;font-weight:700;margin:0;letter-spacing:-.03em;line-height:1}
-    .inv-no{margin:10px 0 0;color:#737373;font-size:14px;font-weight:500}
-    .brand{font-size:26px;font-weight:700;letter-spacing:-.02em}
-    .logo{max-height:40px;max-width:160px;object-fit:contain;filter:grayscale(1)}
-    .divider{border:0;border-top:1px solid #e5e5e5;margin:28px 0 0}
-    .meta{display:flex;justify-content:flex-end;gap:24px;margin-top:28px}
-    .muted{color:#a3a3a3;font-size:11px;margin:0 0 4px}
-    .dates{display:flex;gap:40px;text-align:right}
-    .dates strong{display:block;margin-top:2px;font-size:13px}
-    .parties{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:36px}
-    .parties .name{font-weight:600;margin:8px 0 4px;font-size:13px}
-    .parties p{margin:1px 0;color:#525252;font-size:12px}
-    table{width:100%;border-collapse:collapse;margin-top:36px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden}
-    thead th{background:#f5f5f5;text-align:left;padding:12px 14px;font-size:11px;font-weight:500;color:#737373}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#000;font-size:12px;line-height:1.4;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .page{width:${PRINT_WIDTH_MM}mm;margin:0;padding:0}
+    .head{display:flex;justify-content:space-between;align-items:center;gap:24px}
+    .head-title{margin-left:auto;text-align:right}
+    .title{font-size:30px;font-weight:700;margin:0;letter-spacing:-.03em;line-height:1}
+    .inv-no{margin:6px 0 0;color:#000;font-size:13px;font-weight:600}
+    .logo{max-height:80px;max-width:240px;object-fit:contain}
+    .divider{border:0;border-top:1px solid #555;margin:12px 0 0}
+    .meta{display:flex;justify-content:flex-end;gap:24px;margin-top:12px}
+    .muted{color:#000;font-size:10.5px;margin:0 0 2px}
+    .dates{display:flex;gap:36px;text-align:right}
+    .dates strong{display:block;font-size:12px}
+    .parties{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:14px}
+    .parties .name{font-weight:700;margin:4px 0 2px;font-size:12.5px}
+    .parties p{margin:1px 0;color:#000;font-size:11.5px}
+    table{width:100%;border-collapse:collapse;margin-top:16px;border:1px solid #555}
+    thead th{background:#ececec;text-align:left;padding:7px 10px;font-size:10.5px;font-weight:700;color:#000;border-bottom:1px solid #555}
     th.num,td.num{text-align:right}
-    td{padding:14px;border-top:1px solid #e5e5e5;vertical-align:top}
+    th.sno,td.sno{text-align:center;width:32px}
+    td.line-date{font-size:11px;white-space:nowrap}
+    tr{break-inside:avoid}
+    td{padding:6px 10px;border-top:1px solid #8c8c8c;vertical-align:top}
     td.desc{font-weight:500}
-    td.amount{font-weight:500}
-    .total-row td{border-top:1px solid #d4d4d4;font-size:15px;font-weight:700;padding:16px 14px}
-    .note{margin-top:22px;padding:12px 14px;border:1px solid #e5e5e5;border-radius:8px;background:#fafafa;color:#525252;font-size:12px}
-    .foot{display:grid;grid-template-columns:1.2fr auto;gap:40px;margin-top:36px;align-items:end}
-    .pay h4{margin:0 0 8px;font-size:14px}
-    .pay p{margin:1px 0;color:#525252;font-size:12px}
+    td.amount{font-weight:600}
+    .total-row td{border-top:1px solid #555;font-size:14px;font-weight:700;padding:9px 10px}
+    .words-row td{border-top:0;padding:0 10px 9px;font-size:11.5px;font-weight:600;color:#000}
+    .words-row span{color:#000;font-weight:400}
+    .note{margin-top:12px;padding:8px 10px;border:1px solid #555;border-radius:6px;background:#fafafa;color:#000;font-size:11.5px}
+    .foot{display:grid;grid-template-columns:1.2fr auto;gap:24px;margin-top:16px;align-items:end}
+    .pay h4{margin:0 0 4px;font-size:13px}
+    .pay p{margin:0;color:#000;font-size:11.5px}
+    .pay .bank-detail{font-weight:700;color:#000}
     .sign{text-align:right}
-    .qr{width:80px;height:80px;border:1px solid #d4d4d4;display:block;margin:0 0 0 auto}
-    @page{margin:12mm}
-    @media print{.page{padding:0}}
+    .qr{width:72px;height:72px;border:1px solid #555;display:block;margin:0 0 0 auto}
+    @page{size:A4;margin:${PRINT_MARGIN_MM}mm}
   </style>
 </head>
 <body>
   <div class="page">
     <div class="head">
-      <div>
+      ${logoBlock}
+      <div class="head-title">
         <h1 class="title">Invoice</h1>
         <p class="inv-no">${escapeHtml(numberLabel)}</p>
       </div>
-      ${logoBlock}
     </div>
     <hr class="divider" />
 
@@ -201,6 +231,8 @@ function buildInvoiceHtml(
     <table>
       <thead>
         <tr>
+          <th class="sno">S.No</th>
+          <th>Date</th>
           <th>Description</th>
           <th class="num">Units</th>
           <th class="num">Price</th>
@@ -209,10 +241,13 @@ function buildInvoiceHtml(
         </tr>
       </thead>
       <tbody>
-        ${rows || '<tr><td colspan="5">No line items</td></tr>'}
+        ${rows || '<tr><td colspan="7">No line items</td></tr>'}
         <tr class="total-row">
-          <td colspan="4">Total Amount</td>
+          <td colspan="6">Total Amount</td>
           <td class="num">${escapeHtml(formatCurrency(total, currency))}</td>
+        </tr>
+        <tr class="words-row">
+          <td colspan="7"><span>Amount in words:</span> ${escapeHtml(amountInWords(total, currency))}</td>
         </tr>
       </tbody>
     </table>
@@ -221,7 +256,7 @@ function buildInvoiceHtml(
 
     <div class="foot">
       <div class="pay">
-        <h4>Payment Method</h4>
+        <h4>Payment Method - ${escapeHtml(method)}</h4>
         ${paymentDetails}
       </div>
       <div class="sign">
@@ -237,10 +272,10 @@ function printHtml(html: string): void {
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
   iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
+  iframe.style.left = '-10000px';
+  iframe.style.top = '0';
+  iframe.style.width = `${PRINT_WIDTH_MM}mm`;
+  iframe.style.height = `${PRINT_HEIGHT_MM}mm`;
   iframe.style.border = '0';
   document.body.appendChild(iframe);
 
@@ -260,14 +295,22 @@ function printHtml(html: string): void {
   doc.write(html);
   doc.close();
 
-  const triggerPrint = () => {
+  const triggerPrint = async () => {
     const win = iframe.contentWindow;
     if (!win) {
       cleanup();
       return;
     }
+    await Promise.all(
+      Array.from(win.document.images, (img) => img.decode().catch(() => undefined))
+    );
+    const page = win.document.querySelector<HTMLElement>('.page');
+    if (page) fitToSinglePage(page);
+    const appTitle = document.title;
+    document.title = win.document.title;
     win.focus();
     win.print();
+    document.title = appTitle;
     cleanup();
   };
 
@@ -282,13 +325,16 @@ export async function downloadInvoicePdf(invoice: Invoice): Promise<void> {
   let qrDataUrl: string | null = null;
   let profile = getUserProfile();
   let client: Awaited<ReturnType<typeof api.clients.get>> | null = null;
+  let fullInvoice = invoice;
 
   try {
-    const [share, serverProfile, clientRow] = await Promise.all([
+    const [loaded, share, serverProfile, clientRow] = await Promise.all([
+      api.invoices.get(invoice.id).catch(() => invoice),
       api.invoices.share(invoice.id),
       api.profile.get(),
       invoice.client_id ? api.clients.get(invoice.client_id) : Promise.resolve(null),
     ]);
+    fullInvoice = loaded;
     profile = serverProfile;
     setUserProfile(serverProfile);
     client = clientRow;
@@ -315,5 +361,5 @@ export async function downloadInvoicePdf(invoice: Invoice): Promise<void> {
     }
   }
 
-  printHtml(buildInvoiceHtml(invoice, qrDataUrl, profile, client));
+  printHtml(buildInvoiceHtml(fullInvoice, qrDataUrl, profile, client));
 }

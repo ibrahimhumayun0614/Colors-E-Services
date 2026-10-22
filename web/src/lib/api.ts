@@ -77,6 +77,11 @@ export const api = {
     update: (id: number, data: Partial<Client>) =>
       request<Client>(`/clients/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => request<{ ok: boolean }>(`/clients/${id}`, { method: 'DELETE' }),
+    bulkDelete: (ids: number[]) =>
+      request<{ ok: boolean; deleted: number }>('/clients/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      }),
   },
   services: {
     list: (params?: { client_id?: number; service_type?: string; expiring_days?: number }) => {
@@ -302,6 +307,7 @@ export interface InvoiceItem {
   description: string;
   quantity: number;
   rate: number;
+  line_date?: string | null;
 }
 
 export interface Invoice {
@@ -335,7 +341,13 @@ export interface CreateInvoicePayload {
   notes?: string;
   bank_account_index?: number;
   payment_account?: BankAccount | null;
-  items: { description: string; quantity: number; rate: number; service_id?: number | null }[];
+  items: {
+    description: string;
+    quantity: number;
+    rate: number;
+    service_id?: number | null;
+    line_date?: string | null;
+  }[];
 }
 
 export interface UpdateInvoicePayload {
@@ -346,7 +358,13 @@ export interface UpdateInvoicePayload {
   notes?: string | null;
   bank_account_index?: number;
   payment_account?: BankAccount | null;
-  items: { description: string; quantity: number; rate: number; service_id?: number | null }[];
+  items: {
+    description: string;
+    quantity: number;
+    rate: number;
+    service_id?: number | null;
+    line_date?: string | null;
+  }[];
 }
 
 export interface Task {

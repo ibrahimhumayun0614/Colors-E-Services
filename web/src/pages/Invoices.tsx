@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Copy, Download, Eye, FileText, Loader2, Plus, Trash2 } from 'lucide-react';
+import {
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Copy,
+  Download,
+  Eye,
+  FileText,
+  Loader2,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, type Invoice, type InvoiceStatus, type UpdateInvoicePayload } from '@/lib/api';
 import { duplicateInvoicePayload, effectiveInvoiceStatus } from '@/lib/invoices';
@@ -42,6 +53,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { InvoiceBuilder } from '@/components/InvoiceBuilder';
 import { APP_DESCRIPTION, APP_NAME, APP_TAGLINE } from '@/lib/branding';
 import { InvoicePreviewDialog } from '@/components/InvoiceDocumentPreview';
@@ -67,6 +84,53 @@ function formatMonthLabel(monthKey: string): string {
   const [y, m] = monthKey.split('-').map(Number);
   if (!y || !m) return monthKey;
   return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+const statusChoices: InvoiceStatus[] = ['draft', 'sent', 'paid', 'cancelled'];
+
+function InvoiceStatusMenu({
+  invoice,
+  disabled,
+  onChange,
+}: {
+  invoice: Invoice;
+  disabled?: boolean;
+  onChange: (status: InvoiceStatus) => void;
+}) {
+  const shown = effectiveInvoiceStatus(invoice);
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild disabled={disabled}>
+        <button
+          type="button"
+          className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          title="Change status"
+        >
+          <Badge variant={invoiceStatusVariant[shown]} className="cursor-pointer gap-1 pr-1.5">
+            {formatInvoiceStatus(shown)}
+            <ChevronDown className="h-3 w-3 opacity-70" aria-hidden />
+          </Badge>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[9rem]">
+        {statusChoices.map((status) => {
+          const current = invoice.status === status || (status === 'sent' && invoice.status === 'overdue');
+          return (
+            <DropdownMenuItem
+              key={status}
+              disabled={current}
+              onSelect={() => onChange(status)}
+              className="justify-between gap-3"
+            >
+              {formatInvoiceStatus(status)}
+              {current && <Check className="h-3.5 w-3.5" aria-hidden />}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function InvoiceForm({
@@ -638,9 +702,11 @@ export function InvoicesPage() {
                           {formatCurrency(inv.total ?? 0, resolveCurrency(inv.currency))}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={invoiceStatusVariant[status]}>
-                            {formatInvoiceStatus(status)}
-                          </Badge>
+                          <InvoiceStatusMenu
+                            invoice={inv}
+                            disabled={statusMutation.isPending && statusMutation.variables?.id === inv.id}
+                            onChange={(next) => statusMutation.mutate({ id: inv.id, status: next })}
+                          />
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
@@ -756,9 +822,11 @@ export function InvoicesPage() {
                       <p className="font-semibold">{formatCurrency(inv.total ?? 0, resolveCurrency(inv.currency))}</p>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge variant={invoiceStatusVariant[status]}>
-                        {formatInvoiceStatus(status)}
-                      </Badge>
+                      <InvoiceStatusMenu
+                        invoice={inv}
+                        disabled={statusMutation.isPending && statusMutation.variables?.id === inv.id}
+                        onChange={(next) => statusMutation.mutate({ id: inv.id, status: next })}
+                      />
                       <span className="text-xs text-muted-foreground">
                         Due {formatDate(inv.due_date)}
                       </span>

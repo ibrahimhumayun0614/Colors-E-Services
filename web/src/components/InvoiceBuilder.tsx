@@ -31,11 +31,12 @@ type LineItem = {
   description: string;
   quantity: string;
   rate: string;
+  line_date: string;
   service_id?: number | null;
 };
 
-function emptyLine(): LineItem {
-  return { description: '', quantity: '1', rate: '', service_id: null };
+function emptyLine(lineDate = new Date().toISOString().split('T')[0]): LineItem {
+  return { description: '', quantity: '1', rate: '', line_date: lineDate, service_id: null };
 }
 
 function linesFromInvoice(invoice: Invoice): LineItem[] {
@@ -45,6 +46,7 @@ function linesFromInvoice(invoice: Invoice): LineItem[] {
     description: item.description,
     quantity: String(item.quantity),
     rate: String(item.rate),
+    line_date: item.line_date?.trim() || invoice.issue_date,
     service_id: item.service_id ?? null,
   }));
 }
@@ -58,6 +60,7 @@ function linesFromServices(services: Service[]): LineItem[] {
       description: line.description,
       quantity: String(line.quantity),
       rate: String(line.rate),
+      line_date: new Date().toISOString().split('T')[0],
       service_id: line.service_id,
     };
   });
@@ -80,6 +83,37 @@ function pickCurrency(services: Service[], fallback: string): string {
     }
   }
   return best;
+}
+
+const LOGO_MAX_WIDTH = 480;
+const LOGO_MAX_HEIGHT = 240;
+
+/** Downscale to invoice-header size so the data URL stays small enough to store on the profile. */
+function resizeLogo(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, LOGO_MAX_WIDTH / img.width, LOGO_MAX_HEIGHT / img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas unavailable'));
+        return;
+      }
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Invalid image'));
+    };
+    img.src = url;
+  });
 }
 
 type CompanyDraft = {
@@ -481,17 +515,27 @@ export function InvoiceBuilder({
     };
   }, [clientId, isEdit]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const previewItems = useMemo(
+    () =>
+      items.map((item) => ({
+        description: item.description,
+        quantity: parseFloat(item.quantity) || 0,
+        rate: parseFloat(item.rate) || 0,
+        line_date: item.line_date || issueDate,
+        service_id: item.service_id ?? null,
+      })),
+    [items, issueDate]
+  );
+
   const parsedItems = useMemo(
     () =>
-      items
+      previewItems
         .map((item) => ({
+          ...item,
           description: item.description.trim(),
-          quantity: parseFloat(item.quantity) || 0,
-          rate: parseFloat(item.rate) || 0,
-          service_id: item.service_id ?? null,
         }))
         .filter((item) => item.description || item.rate > 0),
-    [items]
+    [previewItems]
   );
 
   const billableCount = billableServicesForInvoice(clientServices).length;
@@ -518,6 +562,7 @@ export function InvoiceBuilder({
               description: productLineDescription(product),
               quantity: '1',
               rate: String(product.unit_price),
+              line_date: item.line_date || issueDate,
               service_id: null,
             }
       )
@@ -602,11 +647,12 @@ export function InvoiceBuilder({
       notes: notes.trim() || undefined,
       bank_account_index: safeIdx,
       payment_account: paymentAccount,
-      items: lineItems.map(({ description, quantity, rate, service_id }) => ({
+      items: lineItems.map(({ description, quantity, rate, service_id, line_date }) => ({
         description,
         quantity,
         rate,
         service_id: service_id ?? null,
+        line_date: line_date || issueDate,
       })),
     });
   }
@@ -638,20 +684,17 @@ export function InvoiceBuilder({
     };
   }, [company, selectedBankIndex]);
 
-  function onLogoChange(file: File | null) {
+  async function onLogoChange(file: File | null) {
     if (!file) {
       setCompany((c) => ({ ...c, logo_data: '' }));
       return;
     }
-    if (file.size > 600_000) {
-      toast.error('Logo must be under 600KB');
-      return;
+    try {
+      const logo_data = await resizeLogo(file);
+      setCompany((c) => ({ ...c, logo_data }));
+    } catch {
+      toast.error('Could not read that image. Try a PNG or JPG.');
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setCompany((c) => ({ ...c, logo_data: String(reader.result || '') }));
-    };
-    reader.readAsDataURL(file);
   }
 
   const inputClass = 'h-9';
@@ -1036,7 +1079,7 @@ export function InvoiceBuilder({
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() => setItems((prev) => [...prev, emptyLine()])}
+                  onClick={() => setItems((prev) => [...prev, emptyLine(issueDate)])}
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Add item
@@ -1044,8 +1087,31 @@ export function InvoiceBuilder({
               </div>
             </div>
             <div className="space-y-3">
+              <div className="hidden gap-2 px-0.5 text-[11px] font-medium text-muted-foreground sm:grid sm:grid-cols-[2.25rem_8.5rem_1fr_4.5rem_6.5rem_2.25rem]">
+                <span className="text-center">S.No</span>
+                <span>Date</span>
+                <span>Description</span>
+                <span className="text-right">Qty</span>
+                <span className="text-right">Rate</span>
+                <span aria-hidden />
+              </div>
               {items.map((item, index) => (
-                <div key={index} className="grid gap-2 sm:grid-cols-[1fr_4.5rem_6.5rem_auto]">
+                <div
+                  key={index}
+                  className="grid gap-2 sm:grid-cols-[2.25rem_8.5rem_1fr_4.5rem_6.5rem_2.25rem] sm:items-center"
+                >
+                  <span
+                    className="flex h-9 items-center justify-center text-sm tabular-nums text-muted-foreground"
+                    aria-hidden
+                  >
+                    {index + 1}
+                  </span>
+                  <Input
+                    className={inputClass}
+                    type="date"
+                    value={item.line_date || issueDate}
+                    onChange={(e) => updateItem(index, { line_date: e.target.value })}
+                  />
                   {catalogProducts.length > 0 ? (
                     <ProductLineDescriptionInput
                       value={item.description}
@@ -1117,7 +1183,7 @@ export function InvoiceBuilder({
           currency={currency}
           company={previewCompany}
           client={clientDraft}
-          items={parsedItems}
+          items={previewItems}
           taxRate={parseFloat(taxRate) || 0}
           notes={notes}
           paymentMethod={company.payment_method}
@@ -1141,7 +1207,11 @@ export function InvoiceBuilder({
           onItemChange={(index, patch) => {
             if (patch.description !== undefined) {
               handleLineDescriptionChange(index, patch.description);
-              if (patch.quantity !== undefined || patch.rate !== undefined) {
+              if (
+                patch.quantity !== undefined ||
+                patch.rate !== undefined ||
+                patch.line_date !== undefined
+              ) {
                 setItems((prev) =>
                   prev.map((item, i) => {
                     if (i !== index) return item;
@@ -1150,6 +1220,10 @@ export function InvoiceBuilder({
                       quantity:
                         patch.quantity !== undefined ? String(patch.quantity) : item.quantity,
                       rate: patch.rate !== undefined ? String(patch.rate) : item.rate,
+                      line_date:
+                        patch.line_date !== undefined
+                          ? patch.line_date || issueDate
+                          : item.line_date,
                     };
                   })
                 );
@@ -1164,11 +1238,13 @@ export function InvoiceBuilder({
                   quantity:
                     patch.quantity !== undefined ? String(patch.quantity) : item.quantity,
                   rate: patch.rate !== undefined ? String(patch.rate) : item.rate,
+                  line_date:
+                    patch.line_date !== undefined ? patch.line_date || issueDate : item.line_date,
                 };
               })
             );
           }}
-          onAddItem={() => setItems((prev) => [...prev, emptyLine()])}
+          onAddItem={() => setItems((prev) => [...prev, emptyLine(issueDate)])}
           onRemoveItem={(index) =>
             setItems((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
           }

@@ -112,6 +112,7 @@ export interface InvoiceItem {
   description: string;
   quantity: number;
   rate: number;
+  line_date?: string | null;
 }
 
 export interface Invoice {

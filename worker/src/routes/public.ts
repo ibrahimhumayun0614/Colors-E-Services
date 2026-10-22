@@ -1,9 +1,11 @@
 import { Hono } from 'hono';
 import QRCode from 'qrcode';
 import type { Env, Invoice, InvoiceItem, UserProfile } from '../types';
-import { paymentDetailsHtml } from '../lib/payment-html';
+import { paymentDetailsHtml, paymentMethodLabel } from '../lib/payment-html';
 import { pickInvoicePaymentAccounts } from '../lib/bank-accounts';
 import { verifyInvoiceShareToken } from '../lib/share';
+import { DEFAULT_LOGO_DATA_URL } from '../lib/default-logo';
+import { amountInWords } from '../lib/amount-words';
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
@@ -36,15 +38,23 @@ function formatDate(value: string | null | undefined): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function addressLine(src: {
+/** Print title, which browsers use as the saved PDF file name, e.g. "Colors Common Services - Invoice 2". */
+function invoiceDocumentTitle(companyName: string, invoiceNumber: string): string {
+  const digits = invoiceNumber.match(/\d+/)?.[0];
+  return `${companyName} - Invoice ${digits ? Number(digits) : invoiceNumber.replace(/^#/, '')}`;
+}
+
+function addressHtml(src: {
   address?: string | null;
   city?: string | null;
   state?: string | null;
   zip?: string | null;
 }): string {
-  return [src.address, [src.city, src.state, src.zip].filter(Boolean).join(', ')]
+  const t = (v?: string | null) => v?.trim() || '';
+  return [t(src.address), [t(src.city), t(src.state), t(src.zip)].filter(Boolean).join(', ')]
     .filter(Boolean)
-    .join(', ');
+    .map(escapeHtml)
+    .join('<br />');
 }
 
 type PublicInvoice = Invoice & {
@@ -76,8 +86,8 @@ function renderInvoicePage(opts: {
     ? invoice.invoice_number
     : `#${invoice.invoice_number}`;
 
-  const fromAddress = addressLine(from);
-  const toAddress = addressLine({
+  const fromAddress = addressHtml(from);
+  const toAddress = addressHtml({
     address: invoice.client_address,
     city: invoice.client_city,
     state: invoice.client_state,
@@ -85,7 +95,7 @@ function renderInvoicePage(opts: {
   });
 
   const fromDetails = [
-    fromAddress ? `<p>${escapeHtml(fromAddress)}</p>` : '',
+    fromAddress ? `<p>${fromAddress}</p>` : '',
     from.tax_id ? `<p>ABN ${escapeHtml(from.tax_id)}</p>` : '',
     from.email ? `<p>${escapeHtml(from.email)}</p>` : '',
     from.phone ? `<p>${escapeHtml(from.phone)}</p>` : '',
@@ -93,7 +103,7 @@ function renderInvoicePage(opts: {
   ].join('');
 
   const toDetails = [
-    toAddress ? `<p>${escapeHtml(toAddress)}</p>` : '',
+    toAddress ? `<p>${toAddress}</p>` : '',
     invoice.client_email ? `<p>${escapeHtml(invoice.client_email)}</p>` : '',
     invoice.client_phone ? `<p>${escapeHtml(invoice.client_phone)}</p>` : '',
   ].join('');
@@ -106,16 +116,17 @@ function renderInvoicePage(opts: {
     companyName
   );
 
-  const logoBlock = from.logo_data
-    ? `<img class="logo" src="${escapeHtml(from.logo_data)}" alt="" />`
-    : '';
+  const logoBlock = `<img class="logo" src="${escapeHtml(from.logo_data || DEFAULT_LOGO_DATA_URL)}" alt="" />`;
 
   const rows = items
-    .map((item) => {
+    .map((item, index) => {
       const line = item.quantity * item.rate;
       const lineTax = line * (taxRate / 100);
+      const lineDate = formatDate(item.line_date?.trim() || invoice.issue_date);
       return `
         <tr>
+          <td class="num sno">${index + 1}</td>
+          <td class="line-date">${escapeHtml(lineDate)}</td>
           <td class="desc">${escapeHtml(stripCatalogSerialPrefix(item.description))}</td>
           <td class="num">${escapeHtml(item.quantity)}</td>
           <td class="num">${escapeHtml(formatCurrency(item.rate, currency))}</td>
@@ -136,43 +147,94 @@ function renderInvoicePage(opts: {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(invoice.invoice_number)}</title>
+  <title>${escapeHtml(invoiceDocumentTitle(companyName, invoice.invoice_number))}</title>
   <style>
     *{box-sizing:border-box}
     html,body{margin:0;padding:0;background:#f5f5f5}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#171717;font-size:13px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#000;font-size:13px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:flex-end;padding:12px 16px;background:#171717}
     .btn{appearance:none;border:0;border-radius:6px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#fff;color:#171717}
     .sheet{max-width:760px;margin:20px auto;background:#fff;padding:44px 40px}
-    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px}
+    .head{display:flex;justify-content:space-between;align-items:center;gap:24px}
+    .head-title{margin-left:auto;text-align:right}
     .title{font-size:40px;font-weight:700;margin:0;letter-spacing:-.03em;line-height:1}
-    .inv-no{margin:10px 0 0;color:#737373;font-size:14px;font-weight:500}
-    .brand{font-size:26px;font-weight:700;letter-spacing:-.02em}
-    .logo{max-height:40px;max-width:160px;object-fit:contain;filter:grayscale(1)}
-    .divider{border:0;border-top:1px solid #e5e5e5;margin:28px 0 0}
+    .inv-no{margin:10px 0 0;color:#000;font-size:14px;font-weight:600}
+    .logo{max-height:96px;max-width:280px;object-fit:contain}
+    .divider{border:0;border-top:1px solid #555;margin:24px 0 0}
     .meta{display:flex;justify-content:flex-end;gap:24px;margin-top:28px}
-    .muted{color:#a3a3a3;font-size:11px;margin:0 0 4px}
+    .muted{color:#000;font-size:11px;margin:0 0 4px}
     .dates{display:flex;gap:40px;text-align:right}
     .dates strong{display:block;margin-top:2px;font-size:13px}
     .parties{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:36px}
-    .parties .name{font-weight:600;margin:8px 0 4px;font-size:13px}
-    .parties p{margin:1px 0;color:#525252;font-size:12px}
-    table{width:100%;border-collapse:collapse;margin-top:36px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden}
-    thead th{background:#f5f5f5;text-align:left;padding:12px 14px;font-size:11px;font-weight:500;color:#737373}
+    .parties .name{font-weight:700;margin:8px 0 4px;font-size:13px}
+    .parties p{margin:1px 0;color:#000;font-size:12px}
+    table{width:100%;border-collapse:collapse;margin-top:36px;border:1px solid #555}
+    thead th{background:#ececec;text-align:left;padding:12px 14px;font-size:11px;font-weight:700;color:#000;border-bottom:1px solid #555}
     th.num,td.num{text-align:right}
-    td{padding:14px;border-top:1px solid #e5e5e5;vertical-align:top}
+    th.sno,td.sno{text-align:center;width:32px}
+    td.line-date{font-size:11px;white-space:nowrap}
+    td{padding:14px;border-top:1px solid #8c8c8c;vertical-align:top}
     td.desc{font-weight:500}
-    td.amount{font-weight:500}
-    .total-row td{border-top:1px solid #d4d4d4;font-size:15px;font-weight:700;padding:16px 14px}
-    .note{margin-top:22px;padding:12px 14px;border:1px solid #e5e5e5;border-radius:8px;background:#fafafa;color:#525252;font-size:12px}
+    td.amount{font-weight:600}
+    .total-row td{border-top:1px solid #555;font-size:15px;font-weight:700;padding:16px 14px}
+    .words-row td{border-top:0;padding:0 14px 16px;font-size:12px;font-weight:600;color:#000}
+    .words-row span{color:#000;font-weight:400}
+    .note{margin-top:22px;padding:12px 14px;border:1px solid #555;border-radius:8px;background:#fafafa;color:#000;font-size:12px}
     .foot{display:grid;grid-template-columns:1.2fr auto;gap:40px;margin-top:36px;align-items:end}
     .pay h4{margin:0 0 8px;font-size:14px}
-    .pay p{margin:1px 0;color:#525252;font-size:12px}
+    .pay p{margin:1px 0;color:#000;font-size:12px}
+    .pay .bank-detail{font-weight:700;color:#000}
     .sign{text-align:right}
-    .qr{width:80px;height:80px;border:1px solid #d4d4d4;display:block;margin:0 0 0 auto}
+    .qr{width:80px;height:80px;border:1px solid #555;display:block;margin:0 0 0 auto}
     @media (max-width:640px){.sheet{margin:12px;padding:28px 18px}.meta,.parties,.foot,.dates{display:block}.dates>div,.parties>div{margin-top:16px;text-align:left}}
-    @media print{.toolbar{display:none}body{background:#fff}.sheet{margin:0;max-width:none}@page{margin:12mm}}
+    @media print{.toolbar{display:none}body{background:#fff}.sheet{margin:0;max-width:none}@page{size:A4;margin:10mm}}
+    body.print-mode{background:#fff;font-size:12px;line-height:1.4}
+    .print-mode .toolbar{display:none}
+    .print-mode .sheet{width:190mm;max-width:none;margin:0;padding:0}
+    .print-mode .title{font-size:30px}
+    .print-mode .inv-no{margin-top:6px;font-size:13px}
+    .print-mode .logo{max-height:80px;max-width:240px}
+    .print-mode .divider{margin-top:12px}
+    .print-mode .meta{display:flex;margin-top:12px}
+    .print-mode .muted{font-size:10.5px;margin-bottom:2px}
+    .print-mode .dates{display:flex;gap:36px}
+    .print-mode .dates>div{margin-top:0;text-align:right}
+    .print-mode .dates strong{margin-top:0;font-size:12px}
+    .print-mode .parties{display:grid;gap:32px;margin-top:14px}
+    .print-mode .parties>div{margin-top:0}
+    .print-mode .parties .name{margin:4px 0 2px;font-size:12.5px}
+    .print-mode .parties p{font-size:11.5px}
+    .print-mode table{margin-top:16px}
+    .print-mode thead th{padding:7px 10px;font-size:10.5px}
+    .print-mode tr{break-inside:avoid}
+    .print-mode td{padding:6px 10px}
+    .print-mode .total-row td{font-size:14px;padding:9px 10px}
+    .print-mode .words-row td{padding:0 10px 9px;font-size:11.5px}
+    .print-mode .note{margin-top:12px;padding:8px 10px;font-size:11.5px}
+    .print-mode .foot{display:grid;gap:24px;margin-top:16px}
+    .print-mode .pay h4{margin-bottom:4px;font-size:13px}
+    .print-mode .pay p{margin:0;font-size:11.5px}
+    .print-mode .qr{width:72px;height:72px}
   </style>
+  <script>
+    (function () {
+      var MAX_HEIGHT = (297 - 20) * 96 / 25.4 - 4;
+      function sheet() { return document.querySelector('.sheet'); }
+      window.addEventListener('beforeprint', function () {
+        document.body.classList.add('print-mode');
+        var s = sheet();
+        if (!s) return;
+        s.style.zoom = '';
+        var h = s.scrollHeight;
+        if (h > MAX_HEIGHT) s.style.zoom = String(MAX_HEIGHT / h);
+      });
+      window.addEventListener('afterprint', function () {
+        document.body.classList.remove('print-mode');
+        var s = sheet();
+        if (s) s.style.zoom = '';
+      });
+    })();
+  </script>
 </head>
 <body>
   <div class="toolbar">
@@ -180,11 +242,11 @@ function renderInvoicePage(opts: {
   </div>
   <div class="sheet">
     <div class="head">
-      <div>
+      ${logoBlock}
+      <div class="head-title">
         <h1 class="title">Invoice</h1>
         <p class="inv-no">${escapeHtml(numberLabel)}</p>
       </div>
-      ${logoBlock}
     </div>
     <hr class="divider" />
 
@@ -217,6 +279,8 @@ function renderInvoicePage(opts: {
     <table>
       <thead>
         <tr>
+          <th class="sno">S.No</th>
+          <th>Date</th>
           <th>Description</th>
           <th class="num">Units</th>
           <th class="num">Price</th>
@@ -225,10 +289,13 @@ function renderInvoicePage(opts: {
         </tr>
       </thead>
       <tbody>
-        ${rows || '<tr><td colspan="5">No line items</td></tr>'}
+        ${rows || '<tr><td colspan="7">No line items</td></tr>'}
         <tr class="total-row">
-          <td colspan="4">Total Amount</td>
+          <td colspan="6">Total Amount</td>
           <td class="num">${escapeHtml(formatCurrency(total, currency))}</td>
+        </tr>
+        <tr class="words-row">
+          <td colspan="7"><span>Amount in words:</span> ${escapeHtml(amountInWords(total, currency))}</td>
         </tr>
       </tbody>
     </table>
@@ -237,7 +304,7 @@ function renderInvoicePage(opts: {
 
     <div class="foot">
       <div class="pay">
-        <h4>Payment Method</h4>
+        <h4>Payment Method - ${escapeHtml(paymentMethodLabel(from))}</h4>
         ${paymentDetails}
       </div>
       <div class="sign">

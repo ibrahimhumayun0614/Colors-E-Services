@@ -8,6 +8,7 @@ import { getUserProfile, setUserProfile } from '@/lib/auth';
 import { resolveBankAccounts, pickInvoicePaymentAccounts, type BankAccount } from '@/lib/bank-accounts';
 import { resolveCurrency } from '@/lib/services';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
+import { amountInWords } from '@/lib/amount-words';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -50,6 +51,7 @@ export type PreviewLineItem = {
   description: string;
   quantity: number;
   rate: number;
+  line_date?: string | null;
 };
 
 export function profileToCompany(profile: UserProfile): CompanyInfo {
@@ -195,7 +197,9 @@ export function InvoiceDocumentPreview({
     company.bank_accounts?.length > 0
       ? company.bank_accounts
       : resolveBankAccounts(company);
-  const displayItems = items.length ? items : [{ description: '', quantity: 1, rate: 0 }];
+  const displayItems = items.length
+    ? items
+    : [{ description: '', quantity: 1, rate: 0, line_date: issueDate }];
   const canEdit = editable;
   const ro = !canEdit;
 
@@ -208,38 +212,38 @@ export function InvoiceDocumentPreview({
       </div>
 
       <div className="overflow-x-auto">
-        <div className="min-w-[680px] bg-white px-10 py-10 text-[13px] leading-relaxed text-neutral-900 sm:px-12 sm:py-12">
+        <div className="min-w-[680px] bg-white px-10 py-10 text-[13px] leading-relaxed text-black sm:px-12 sm:py-12">
           {/* Header — logo only, no name brand */}
-          <div className="flex items-start justify-between gap-6">
-            <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-6">
+            {company.logo_data ? (
+              <img
+                src={company.logo_data}
+                alt=""
+                className="max-h-24 max-w-[280px] object-contain"
+              />
+            ) : null}
+            <div className="ml-auto min-w-0 flex-1 text-right">
               <h1 className="text-[40px] font-bold leading-none tracking-tight">Invoice</h1>
-              <div className="mt-2 flex items-center gap-1 text-sm font-medium text-neutral-500">
+              <div className="mt-2 flex items-center justify-end gap-1 text-sm font-semibold text-black">
                 <span>#</span>
                 <GhostInput
                   readOnly={ro}
                   value={invoiceLabel.replace(/^#/, '')}
                   onChange={(e) => handlers.onInvoiceLabelChange?.(e.target.value)}
                   placeholder="Invoice number"
-                  className="text-sm font-medium text-neutral-500"
+                  className="w-40 text-right text-sm font-semibold text-black"
                 />
               </div>
             </div>
-            {company.logo_data ? (
-              <img
-                src={company.logo_data}
-                alt=""
-                className="h-10 max-w-[160px] object-contain grayscale"
-              />
-            ) : null}
           </div>
 
-          <div className="mt-7 border-t border-neutral-200" />
+          <div className="mt-6 border-t border-neutral-500" />
 
           {/* Dates */}
           <div className="mt-7 flex justify-end">
             <div className="flex shrink-0 gap-8 text-right">
               <div>
-                <p className="text-[11px] text-neutral-400">Issued Date</p>
+                <p className="text-[11px] text-black">Issued Date</p>
                 {canEdit ? (
                   <GhostInput
                     type="date"
@@ -252,7 +256,7 @@ export function InvoiceDocumentPreview({
                 )}
               </div>
               <div>
-                <p className="text-[11px] text-neutral-400">Due Date</p>
+                <p className="text-[11px] text-black">Due Date</p>
                 {canEdit ? (
                   <GhostInput
                     type="date"
@@ -270,7 +274,7 @@ export function InvoiceDocumentPreview({
           {/* From / To */}
           <div className="mt-9 grid grid-cols-2 gap-10">
             <div>
-              <p className="text-[11px] text-neutral-400">From</p>
+              <p className="text-[11px] text-black">From</p>
               <GhostInput
                 readOnly={ro}
                 value={company.company_name}
@@ -278,13 +282,13 @@ export function InvoiceDocumentPreview({
                 placeholder="Your company"
                 className="mt-2 font-semibold"
               />
-              <div className="mt-1 space-y-0.5 text-[12px] text-neutral-600">
+              <div className="mt-1 space-y-0.5 text-[12px] text-black">
                 <GhostInput
                   readOnly={ro}
                   value={company.address}
                   onChange={(e) => handlers.onCompanyChange?.({ address: e.target.value })}
                   placeholder="Address"
-                  className="text-[12px] text-neutral-600"
+                  className="text-[12px] text-black"
                 />
                 <div className="flex gap-1">
                   <GhostInput
@@ -292,21 +296,21 @@ export function InvoiceDocumentPreview({
                     value={company.city}
                     onChange={(e) => handlers.onCompanyChange?.({ city: e.target.value })}
                     placeholder="City"
-                    className="text-[12px] text-neutral-600"
+                    className="text-[12px] text-black"
                   />
                   <GhostInput
                     readOnly={ro}
                     value={company.state}
                     onChange={(e) => handlers.onCompanyChange?.({ state: e.target.value })}
                     placeholder="State"
-                    className="text-[12px] text-neutral-600"
+                    className="text-[12px] text-black"
                   />
                   <GhostInput
                     readOnly={ro}
                     value={company.zip}
                     onChange={(e) => handlers.onCompanyChange?.({ zip: e.target.value })}
                     placeholder="ZIP"
-                    className="w-20 text-[12px] text-neutral-600"
+                    className="w-20 text-[12px] text-black"
                   />
                 </div>
                 <div className="flex items-center gap-1">
@@ -316,7 +320,7 @@ export function InvoiceDocumentPreview({
                     value={company.tax_id}
                     onChange={(e) => handlers.onCompanyChange?.({ tax_id: e.target.value })}
                     placeholder="Tax ID"
-                    className="text-[12px] text-neutral-600"
+                    className="text-[12px] text-black"
                   />
                 </div>
                 <GhostInput
@@ -324,26 +328,26 @@ export function InvoiceDocumentPreview({
                   value={company.email}
                   onChange={(e) => handlers.onCompanyChange?.({ email: e.target.value })}
                   placeholder="Email"
-                  className="text-[12px] text-neutral-600"
+                  className="text-[12px] text-black"
                 />
                 <GhostInput
                   readOnly={ro}
                   value={company.phone}
                   onChange={(e) => handlers.onCompanyChange?.({ phone: e.target.value })}
                   placeholder="Phone"
-                  className="text-[12px] text-neutral-600"
+                  className="text-[12px] text-black"
                 />
                 <GhostInput
                   readOnly={ro}
                   value={company.website}
                   onChange={(e) => handlers.onCompanyChange?.({ website: e.target.value })}
                   placeholder="Website"
-                  className="text-[12px] text-neutral-600"
+                  className="text-[12px] text-black"
                 />
               </div>
             </div>
             <div>
-              <p className="text-[11px] text-neutral-400">To</p>
+              <p className="text-[11px] text-black">To</p>
               <GhostInput
                 readOnly={ro}
                 value={client.name}
@@ -351,13 +355,13 @@ export function InvoiceDocumentPreview({
                 placeholder="Client name"
                 className="mt-2 font-semibold"
               />
-              <div className="mt-1 space-y-0.5 text-[12px] text-neutral-600">
+              <div className="mt-1 space-y-0.5 text-[12px] text-black">
                 <GhostInput
                   readOnly={ro}
                   value={client.address}
                   onChange={(e) => handlers.onClientChange?.({ address: e.target.value })}
                   placeholder="Address"
-                  className="text-[12px] text-neutral-600"
+                  className="text-[12px] text-black"
                 />
                 <div className="flex gap-1">
                   <GhostInput
@@ -365,21 +369,21 @@ export function InvoiceDocumentPreview({
                     value={client.city}
                     onChange={(e) => handlers.onClientChange?.({ city: e.target.value })}
                     placeholder="City"
-                    className="text-[12px] text-neutral-600"
+                    className="text-[12px] text-black"
                   />
                   <GhostInput
                     readOnly={ro}
                     value={client.state}
                     onChange={(e) => handlers.onClientChange?.({ state: e.target.value })}
                     placeholder="State"
-                    className="text-[12px] text-neutral-600"
+                    className="text-[12px] text-black"
                   />
                   <GhostInput
                     readOnly={ro}
                     value={client.zip}
                     onChange={(e) => handlers.onClientChange?.({ zip: e.target.value })}
                     placeholder="ZIP"
-                    className="w-20 text-[12px] text-neutral-600"
+                    className="w-20 text-[12px] text-black"
                   />
                 </div>
                 <GhostInput
@@ -387,38 +391,42 @@ export function InvoiceDocumentPreview({
                   value={client.email}
                   onChange={(e) => handlers.onClientChange?.({ email: e.target.value })}
                   placeholder="Email"
-                  className="text-[12px] text-neutral-600"
+                  className="text-[12px] text-black"
                 />
                 <GhostInput
                   readOnly={ro}
                   value={client.phone}
                   onChange={(e) => handlers.onClientChange?.({ phone: e.target.value })}
                   placeholder="Phone"
-                  className="text-[12px] text-neutral-600"
+                  className="text-[12px] text-black"
                 />
               </div>
             </div>
           </div>
 
           {/* Items table */}
-          <div className="mt-10 overflow-hidden rounded-lg border border-neutral-200">
+          <div className="mt-10 overflow-hidden rounded-lg border border-neutral-500">
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className={canEdit ? 'w-[34%]' : 'w-[38%]'} />
-                <col className="w-[11%]" />
-                <col className="w-[14%]" />
+                <col className="w-[5%]" />
                 <col className="w-[12%]" />
-                <col className="w-[14%]" />
-                {canEdit ? <col className="w-[7%]" /> : null}
+                <col className={canEdit ? 'w-[26%]' : 'w-[30%]'} />
+                <col className="w-[9%]" />
+                <col className="w-[12%]" />
+                <col className="w-[10%]" />
+                <col className="w-[12%]" />
+                {canEdit ? <col className="w-[6%]" /> : null}
               </colgroup>
               <thead>
-                <tr className="bg-neutral-100 text-[11px] font-medium text-neutral-500">
-                  <th className="px-4 py-3 text-left font-medium">Description</th>
-                  <th className="px-3 py-3 text-right font-medium">Units</th>
-                  <th className="px-3 py-3 text-right font-medium">Price</th>
-                  <th className="px-3 py-3 text-right font-medium">GST</th>
-                  <th className="px-3 py-3 text-right font-medium">Amount</th>
-                  {canEdit ? <th className="px-2 py-3" aria-hidden /> : null}
+                <tr className="border-b border-neutral-500 bg-neutral-200 text-[11px] text-black">
+                  <th className="px-2 py-3 text-center font-bold">S.No</th>
+                  <th className="px-2 py-3 text-left font-bold">Date</th>
+                  <th className="px-3 py-3 text-left font-bold">Description</th>
+                  <th className="px-2 py-3 text-right font-bold">Units</th>
+                  <th className="px-2 py-3 text-right font-bold">Price</th>
+                  <th className="px-2 py-3 text-right font-bold">GST</th>
+                  <th className="px-2 py-3 text-right font-bold">Amount</th>
+                  {canEdit ? <th className="px-1 py-3" aria-hidden /> : null}
                 </tr>
               </thead>
               <tbody>
@@ -427,8 +435,28 @@ export function InvoiceDocumentPreview({
                   const lineTax = line * (taxRate / 100);
                   const descriptionDisplay = stripCatalogSerialPrefix(item.description);
                   return (
-                    <tr key={index} className="border-t border-neutral-200">
-                      <td className="px-4 py-2.5 align-middle">
+                    <tr key={index} className="border-t border-neutral-400">
+                      <td className="px-2 py-2.5 text-center align-middle tabular-nums font-medium">
+                        {index + 1}
+                      </td>
+                      <td className="px-2 py-2.5 align-middle">
+                        {canEdit ? (
+                          <GhostInput
+                            readOnly={ro}
+                            type="date"
+                            value={item.line_date || issueDate}
+                            onChange={(e) =>
+                              handlers.onItemChange?.(index, { line_date: e.target.value })
+                            }
+                            className="w-full text-[11px] text-black"
+                          />
+                        ) : (
+                          <span className="whitespace-nowrap text-[11px]">
+                            {formatDate(item.line_date?.trim() || issueDate)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 align-middle">
                         {canEdit && catalogProducts.length > 0 ? (
                           <ProductLineDescriptionInput
                             value={item.description}
@@ -466,7 +494,7 @@ export function InvoiceDocumentPreview({
                               quantity: parseFloat(e.target.value) || 0,
                             })
                           }
-                          className="w-full text-right tabular-nums text-neutral-600"
+                          className="w-full text-right tabular-nums text-black"
                         />
                       </td>
                       <td className="px-3 py-2.5 align-middle">
@@ -481,13 +509,13 @@ export function InvoiceDocumentPreview({
                               rate: parseFloat(e.target.value) || 0,
                             })
                           }
-                          className="w-full text-right tabular-nums text-neutral-600"
+                          className="w-full text-right tabular-nums text-black"
                         />
                       </td>
-                      <td className="px-3 py-2.5 text-right align-middle tabular-nums text-neutral-600">
+                      <td className="px-3 py-2.5 text-right align-middle tabular-nums text-black">
                         {money(lineTax)}
                       </td>
-                      <td className="px-3 py-2.5 text-right align-middle tabular-nums font-medium">
+                      <td className="px-3 py-2.5 text-right align-middle tabular-nums font-semibold">
                         {money(line)}
                       </td>
                       {canEdit ? (
@@ -509,8 +537,8 @@ export function InvoiceDocumentPreview({
               </tbody>
               {canEdit ? (
                 <tfoot>
-                  <tr className="border-t border-neutral-200">
-                    <td colSpan={6} className="px-4 py-2">
+                  <tr className="border-t border-neutral-400">
+                    <td colSpan={8} className="px-4 py-2">
                       <button
                         type="button"
                         onClick={() => handlers.onAddItem?.()}
@@ -524,11 +552,11 @@ export function InvoiceDocumentPreview({
                 </tfoot>
               ) : null}
             </table>
-            <div className="flex items-center justify-between border-t border-neutral-300 bg-white px-4 py-4">
+            <div className="flex items-center justify-between border-t border-neutral-500 bg-white px-4 py-4">
               <div className="flex items-center gap-2 text-base font-bold">
                 <span>Total Amount</span>
                 {canEdit ? (
-                  <span className="text-xs font-normal text-neutral-400">
+                  <span className="text-xs font-normal text-black">
                     (Tax{' '}
                     <GhostInput
                       type="number"
@@ -538,7 +566,7 @@ export function InvoiceDocumentPreview({
                       onChange={(e) =>
                         handlers.onTaxRateChange?.(parseFloat(e.target.value) || 0)
                       }
-                      className="inline-block w-12 text-center text-xs font-normal text-neutral-600"
+                      className="inline-block w-12 text-center text-xs font-normal text-black"
                     />
                     %)
                   </span>
@@ -546,18 +574,22 @@ export function InvoiceDocumentPreview({
               </div>
               <span className="text-base font-bold tabular-nums">{money(total)}</span>
             </div>
+            <p className="bg-white px-4 pb-4 text-xs font-semibold text-black">
+              <span className="font-normal">Amount in words:</span>{' '}
+              {amountInWords(total, currency)}
+            </p>
           </div>
 
           {/* Note box — only show default placeholder while editing; never force text onto saved/print views */}
           {(canEdit || notes?.trim()) && (
-            <div className="mt-6 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3">
+            <div className="mt-6 rounded-lg border border-neutral-500 bg-neutral-50 px-4 py-3">
               <GhostTextarea
                 readOnly={ro}
                 value={notes ?? ''}
                 onChange={(e) => handlers.onNotesChange?.(e.target.value)}
                 rows={2}
                 placeholder="Optional note (leave blank to hide on the invoice)"
-                className="text-[12px] text-neutral-600"
+                className="text-[12px] text-black"
               />
             </div>
           )}
@@ -565,8 +597,8 @@ export function InvoiceDocumentPreview({
           {/* Payment + QR */}
           <div className="mt-10 grid grid-cols-[1.2fr_auto] gap-10">
             <div>
-              <p className="text-sm font-bold">Payment Method</p>
-              <div className="mt-2 space-y-4 text-[12px] text-neutral-600">
+              <div className="flex items-center gap-1 text-sm font-bold">
+                <span className="shrink-0">Payment Method -</span>
                 <GhostInput
                   readOnly={ro}
                   value={method}
@@ -574,8 +606,10 @@ export function InvoiceDocumentPreview({
                     handlers.onCompanyChange?.({ payment_method: e.target.value })
                   }
                   placeholder="Payment method"
-                  className="text-[12px] text-neutral-600"
+                  className="text-sm font-bold text-black"
                 />
+              </div>
+              <div className="mt-2 space-y-4 text-[12px] text-black">
                 {(bankAccounts.length
                   ? bankAccounts
                   : [
@@ -590,14 +624,9 @@ export function InvoiceDocumentPreview({
                     ]
                 ).map((account, index) => {
                   const isPrimary = index === 0;
-                  const label =
-                    account.label || (bankAccounts.length > 1 ? `Account ${index + 1}` : '');
                   return (
                     <div key={index} className="space-y-0.5">
-                      {label ? (
-                        <p className="font-semibold text-neutral-800">{label}</p>
-                      ) : null}
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 font-bold text-black">
                         <span className="shrink-0">Account Name:</span>
                         <GhostInput
                           readOnly={ro || !isPrimary}
@@ -605,22 +634,22 @@ export function InvoiceDocumentPreview({
                           onChange={(e) =>
                             handlers.onCompanyChange?.({ bank_account_name: e.target.value })
                           }
-                          className="text-[12px] text-neutral-600"
+                          className="text-[12px] font-bold text-black"
                         />
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span className="shrink-0">Code:</span>
+                      <div className="flex items-center gap-1 font-bold text-black">
+                        <span className="shrink-0">IFSC Code:</span>
                         <GhostInput
                           readOnly={ro || !isPrimary}
                           value={account.bank_ifsc}
                           onChange={(e) =>
                             handlers.onCompanyChange?.({ bank_ifsc: e.target.value })
                           }
-                          placeholder="IFSC / code"
-                          className="text-[12px] text-neutral-600"
+                          placeholder="IFSC code"
+                          className="text-[12px] font-bold text-black"
                         />
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 font-bold text-black">
                         <span className="shrink-0">Account Number:</span>
                         <GhostInput
                           readOnly={ro || !isPrimary}
@@ -629,11 +658,11 @@ export function InvoiceDocumentPreview({
                             handlers.onCompanyChange?.({ bank_account: e.target.value })
                           }
                           placeholder="Account number"
-                          className="text-[12px] text-neutral-600"
+                          className="text-[12px] font-bold text-black"
                         />
                       </div>
-                      <div className="flex items-center gap-1">
-                        <span className="shrink-0">Bank:</span>
+                      <div className="flex items-center gap-1 font-bold text-black">
+                        <span className="shrink-0">Bank Name:</span>
                         <GhostInput
                           readOnly={ro || !isPrimary}
                           value={account.bank_name}
@@ -641,11 +670,11 @@ export function InvoiceDocumentPreview({
                             handlers.onCompanyChange?.({ bank_name: e.target.value })
                           }
                           placeholder="Bank name"
-                          className="text-[12px] text-neutral-600"
+                          className="text-[12px] font-bold text-black"
                         />
                       </div>
                       {account.upi_id ? (
-                        <p>UPI: {account.upi_id}</p>
+                        <p className="font-bold text-black">UPI ID: {account.upi_id}</p>
                       ) : null}
                     </div>
                   );
@@ -657,7 +686,7 @@ export function InvoiceDocumentPreview({
                 <img
                   src={qrDataUrl}
                   alt="Scan to view and download invoice"
-                  className="h-20 w-20 border border-neutral-300"
+                  className="h-20 w-20 border border-neutral-500"
                 />
               ) : (
                 <div className="flex h-20 w-20 items-center justify-center border border-dashed border-neutral-300 text-center text-[10px] text-neutral-400">
@@ -693,6 +722,7 @@ export function InvoicePreviewDialog({
   );
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fullInvoice, setFullInvoice] = useState<Invoice | null>(null);
 
   useEffect(() => {
     if (!open || !invoice) return;
@@ -700,18 +730,21 @@ export function InvoicePreviewDialog({
     let cancelled = false;
     setLoading(true);
     setQrDataUrl(null);
+    setFullInvoice(null);
     setClient(clientToInfo(null, invoice.client_name));
 
     Promise.all([
+      api.invoices.get(invoice.id).catch(() => invoice),
       api.profile.get().catch(() => getUserProfile()),
       invoice.client_id ? api.clients.get(invoice.client_id).catch(() => null) : Promise.resolve(null),
       api.invoices.share(invoice.id).catch(() => null),
     ])
-      .then(async ([profile, clientRow, share]) => {
+      .then(async ([loadedInvoice, profile, clientRow, share]) => {
         if (cancelled) return;
+        setFullInvoice(loadedInvoice);
         setUserProfile(profile);
         const base = profileToCompany(profile);
-        const selected = pickInvoicePaymentAccounts(invoice, profile);
+        const selected = pickInvoicePaymentAccounts(loadedInvoice, profile);
         setCompany({
           ...base,
           bank_accounts: selected.length ? selected : base.bank_accounts,
@@ -721,7 +754,7 @@ export function InvoicePreviewDialog({
           bank_account_name: selected[0]?.bank_account_name || base.bank_account_name,
           upi_id: selected[0]?.upi_id || base.upi_id,
         });
-        setClient(clientToInfo(clientRow, invoice.client_name));
+        setClient(clientToInfo(clientRow, loadedInvoice.client_name));
         if (share?.url) {
           try {
             const dataUrl = await QRCode.toDataURL(share.url, {
@@ -746,17 +779,20 @@ export function InvoicePreviewDialog({
 
   if (!invoice) return null;
 
-  const items = (invoice.items ?? []).map((item) => ({
+  const view = fullInvoice ?? invoice;
+
+  const items = (view.items ?? []).map((item) => ({
     description: stripCatalogSerialPrefix(item.description),
     quantity: item.quantity,
     rate: item.rate,
+    line_date: item.line_date?.trim() || view.issue_date,
   }));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Preview · {invoice.invoice_number}</DialogTitle>
+          <DialogTitle>Preview · {view.invoice_number}</DialogTitle>
         </DialogHeader>
 
         {loading ? (
@@ -766,15 +802,15 @@ export function InvoicePreviewDialog({
           </div>
         ) : (
           <InvoiceDocumentPreview
-            invoiceLabel={invoice.invoice_number}
-            issueDate={invoice.issue_date}
-            dueDate={invoice.due_date}
-            currency={resolveCurrency(invoice.currency)}
+            invoiceLabel={view.invoice_number}
+            issueDate={view.issue_date}
+            dueDate={view.due_date}
+            currency={resolveCurrency(view.currency)}
             company={company}
             client={client}
             items={items}
-            taxRate={invoice.tax_rate ?? 0}
-            notes={invoice.notes}
+            taxRate={view.tax_rate ?? 0}
+            notes={view.notes}
             subtitle="Scan the QR to view & download"
             qrDataUrl={qrDataUrl}
             editable={false}

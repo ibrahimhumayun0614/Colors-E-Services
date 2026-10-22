@@ -14,6 +14,7 @@ export function duplicateInvoicePayload(source: Invoice): CreateInvoicePayload {
       quantity: item.quantity,
       rate: item.rate,
       service_id: item.service_id ?? null,
+      line_date: item.line_date ?? today,
     }));
 
   return {

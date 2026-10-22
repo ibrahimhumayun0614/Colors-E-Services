@@ -46,9 +46,23 @@ function underThousand(n: number): string {
   return `${ONES[h]} Hundred${rest ? ` ${underThousand(rest)}` : ''}`.trim();
 }
 
-function integerToWords(n: number): string {
+function indianIntegerToWords(n: number): string {
+  const parts: string[] = [];
+  const crore = Math.floor(n / 10_000_000);
+  const lakh = Math.floor((n % 10_000_000) / 100_000);
+  const thousand = Math.floor((n % 100_000) / 1000);
+  const rest = n % 1000;
+  if (crore) parts.push(`${integerToWords(crore, true)} Crore`);
+  if (lakh) parts.push(`${underThousand(lakh)} Lakh`);
+  if (thousand) parts.push(`${underThousand(thousand)} Thousand`);
+  if (rest) parts.push(underThousand(rest));
+  return parts.join(' ').trim();
+}
+
+function integerToWords(n: number, indian = false): string {
   if (n === 0) return 'Zero';
   if (n < 1000) return underThousand(n);
+  if (indian) return indianIntegerToWords(n);
   const parts: string[] = [];
   const billion = Math.floor(n / 1_000_000_000);
   const million = Math.floor((n % 1_000_000_000) / 1_000_000);
@@ -67,7 +81,7 @@ export function amountInWords(amount: number, currency = 'USD'): string {
   const safe = Number.isFinite(amount) ? Math.abs(amount) : 0;
   const major = Math.floor(safe);
   const minor = Math.round((safe - major) * 100);
-  let text = `${integerToWords(major)} ${words.major}`;
+  let text = `${integerToWords(major, code === 'INR')} ${words.major}`;
   if (minor > 0) text += ` and ${integerToWords(minor)} ${words.minor}`;
   return `${text} Only`;
 }

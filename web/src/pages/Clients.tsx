@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Trash2,
   UserCheck,
   UserPlus,
   Users,
@@ -23,6 +24,7 @@ import { listStaggerStyle } from '@/components/layout/AnimatedPage';
 import { MotionLift } from '@/components/layout/Motion';
 import { EmptyState } from '@/components/layout/EmptyState';
 import { SearchInput } from '@/components/SearchInput';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { TableSkeleton } from '@/components/layout/Skeletons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -124,6 +126,32 @@ function SortableHead({
         </span>
       </button>
     </TableHead>
+  );
+}
+
+function SelectCheckbox({
+  checked,
+  indeterminate = false,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  return (
+    <input
+      type="checkbox"
+      ref={(el) => {
+        if (el) el.indeterminate = indeterminate;
+      }}
+      checked={checked}
+      onChange={(e) => onChange(e.target.checked)}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={label}
+      className="h-4 w-4 cursor-pointer rounded border-input accent-primary"
+    />
   );
 }
 
@@ -434,6 +462,8 @@ export function ClientsPage() {
   const [sortAsc, setSortAsc] = useState(true);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -459,6 +489,21 @@ export function ClientsPage() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setOpen(false);
       toast.success('Client added successfully');
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: api.clients.bulkDelete,
+    onSuccess: ({ deleted }) => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['services'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setSelectedIds(new Set());
+      setBulkDeleteOpen(false);
+      toast.success(`${deleted} ${deleted === 1 ? 'client' : 'clients'} deleted`);
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -546,6 +591,35 @@ export function ClientsPage() {
 
   const pageStart = (page - 1) * PAGE_SIZE;
   const pagedClients = filteredClients.slice(pageStart, pageStart + PAGE_SIZE);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [debouncedSearch, statusFilter]);
+
+  const selectedClients = filteredClients.filter((c) => selectedIds.has(c.id));
+  const selectedCount = selectedClients.length;
+  const pageSelectedCount = pagedClients.filter((c) => selectedIds.has(c.id)).length;
+  const allPageSelected = pagedClients.length > 0 && pageSelectedCount === pagedClients.length;
+
+  function toggleClient(id: number, checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function togglePage(checked: boolean) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const c of pagedClients) {
+        if (checked) next.add(c.id);
+        else next.delete(c.id);
+      }
+      return next;
+    });
+  }
 
   const searching = search !== debouncedSearch || (isFetching && !!debouncedSearch);
   const hasFilters = search.length > 0 || statusFilter !== 'all';
@@ -650,9 +724,43 @@ export function ClientsPage() {
         />
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card">
+          {selectedCount > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/40 px-4 py-2.5">
+              <p className="text-sm">
+                <span className="font-medium">{selectedCount}</span>{' '}
+                {selectedCount === 1 ? 'client' : 'clients'} selected
+              </p>
+              <div className="flex items-center gap-2">
+                {selectedCount < filteredClients.length && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedIds(new Set(filteredClients.map((c) => c.id)))}
+                  >
+                    Select all {filteredClients.length}
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+                  <Trash2 className="h-4 w-4" />
+                  Delete selected
+                </Button>
+              </div>
+            </div>
+          )}
           <Table containerClassName="max-h-[min(70vh,720px)]">
             <TableHeader className="sticky top-0 z-10 bg-card shadow-[0_1px_0_0_hsl(var(--border))]">
                 <TableRow className="hover:bg-transparent">
+                  <TableHead className="sticky top-0 z-10 w-10 bg-card">
+                    <SelectCheckbox
+                      checked={allPageSelected}
+                      indeterminate={pageSelectedCount > 0 && !allPageSelected}
+                      onChange={togglePage}
+                      label="Select all clients on this page"
+                    />
+                  </TableHead>
                   <TableHead className="sticky top-0 z-10 w-12 bg-card text-right font-medium text-muted-foreground">
                     #
                   </TableHead>
@@ -699,9 +807,19 @@ export function ClientsPage() {
                   <TableRow
                     key={client.id}
                     style={listStaggerStyle(index)}
-                    className="list-item-enter cursor-pointer transition-colors duration-200 hover:bg-slate-50 dark:hover:bg-muted/50"
+                    className={cn(
+                      'list-item-enter cursor-pointer transition-colors duration-200 hover:bg-slate-50 dark:hover:bg-muted/50',
+                      selectedIds.has(client.id) && 'bg-primary/5'
+                    )}
                     onClick={() => navigate(`/clients/${client.id}`)}
                   >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <SelectCheckbox
+                        checked={selectedIds.has(client.id)}
+                        onChange={(checked) => toggleClient(client.id, checked)}
+                        label={`Select ${client.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="text-right text-sm tabular-nums text-muted-foreground">
                       {pageStart + index + 1}
                     </TableCell>
@@ -771,6 +889,21 @@ export function ClientsPage() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        onOpenChange={setBulkDeleteOpen}
+        title={`Delete ${selectedCount} ${selectedCount === 1 ? 'client' : 'clients'}?`}
+        description={`${
+          selectedCount === 1
+            ? selectedClients[0]?.name
+            : `These ${selectedCount} clients`
+        } and all related services and invoices will be permanently deleted. This can't be undone.`}
+        confirmLabel="Delete"
+        destructive
+        loading={bulkDeleteMutation.isPending}
+        onConfirm={() => bulkDeleteMutation.mutate(selectedClients.map((c) => c.id))}
+      />
     </div>
   );
 }

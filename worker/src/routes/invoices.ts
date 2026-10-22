@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Env, Invoice, InvoiceItem } from '../types';
+import { insertInvoiceItem } from '../lib/invoice-items';
 import { nextInvoiceNumber, syncOverdueInvoices } from '../lib/invoices';
 import { activateLeadClient } from '../lib/service-actions';
 import { invoiceShareToken } from '../lib/share';
@@ -118,7 +119,13 @@ invoices.post('/', async (c) => {
     notes?: string;
     bank_account_index?: number;
     payment_account?: BankAccount | null;
-    items: { description: string; quantity: number; rate: number; service_id?: number | null }[];
+    items: {
+      description: string;
+      quantity: number;
+      rate: number;
+      service_id?: number | null;
+      line_date?: string | null;
+    }[];
   }>();
 
   if (!body.client_id || !body.issue_date || !body.due_date || !body.items?.length) {
@@ -186,12 +193,7 @@ invoices.post('/', async (c) => {
   }
 
   for (const item of body.items) {
-    await c.env.DB.prepare(
-      `INSERT INTO invoice_items (invoice_id, service_id, description, quantity, rate)
-       VALUES (?, ?, ?, ?, ?)`
-    )
-      .bind(invoiceId, item.service_id ?? null, item.description, item.quantity, item.rate)
-      .run();
+    await insertInvoiceItem(c.env.DB, invoiceId, item);
   }
 
   const invoice = await c.env.DB.prepare('SELECT * FROM invoices WHERE id = ?')
@@ -211,7 +213,13 @@ invoices.put('/:id', async (c) => {
     notes?: string | null;
     bank_account_index?: number;
     payment_account?: BankAccount | null;
-    items?: { description: string; quantity: number; rate: number; service_id?: number | null }[];
+    items?: {
+      description: string;
+      quantity: number;
+      rate: number;
+      service_id?: number | null;
+      line_date?: string | null;
+    }[];
   }>();
 
   const existing = await c.env.DB.prepare('SELECT * FROM invoices WHERE id = ?')
@@ -287,12 +295,7 @@ invoices.put('/:id', async (c) => {
   await c.env.DB.prepare('DELETE FROM invoice_items WHERE invoice_id = ?').bind(id).run();
 
   for (const item of body.items) {
-    await c.env.DB.prepare(
-      `INSERT INTO invoice_items (invoice_id, service_id, description, quantity, rate)
-       VALUES (?, ?, ?, ?, ?)`
-    )
-      .bind(id, item.service_id ?? null, item.description, item.quantity, item.rate)
-      .run();
+    await insertInvoiceItem(c.env.DB, Number(id), item);
   }
 
   const invoice = await c.env.DB.prepare('SELECT * FROM invoices WHERE id = ?')
@@ -312,16 +315,10 @@ invoices.patch('/:id/status', async (c) => {
 
   if (!existing) return c.json({ error: 'Invoice not found' }, 404);
 
-  const allowed: Record<string, string[]> = {
-    draft: ['sent', 'cancelled'],
-    sent: ['paid', 'cancelled'],
-    overdue: ['paid', 'cancelled'],
-    paid: [],
-    cancelled: [],
-  };
+  const allowed = ['draft', 'sent', 'paid', 'cancelled'];
 
-  if (!allowed[existing.status]?.includes(status)) {
-    return c.json({ error: `Cannot change status from ${existing.status} to ${status}` }, 400);
+  if (!allowed.includes(status)) {
+    return c.json({ error: `Invalid status: ${status}` }, 400);
   }
 
   await c.env.DB.prepare(
