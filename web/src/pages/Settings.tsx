@@ -1096,7 +1096,7 @@ export function SettingsPage() {
           <div className="space-y-4 pt-2 text-sm text-muted-foreground">
             <p>Update your password in Cloudflare:</p>
             <ol className="list-decimal space-y-2 pl-5 leading-relaxed">
-              <li>Workers & Pages → <strong>crm-app</strong></li>
+              <li>Workers & Pages → <strong>ccs-invoice-api</strong></li>
               <li>Settings → Variables and Secrets</li>
               <li>Update <strong>API_SECRET</strong> and sign in again</li>
             </ol>

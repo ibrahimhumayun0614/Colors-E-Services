@@ -1,6 +1,6 @@
 import type { Env } from '../types';
 
-const DEFAULT_ORIGINS = 'http://localhost:5173,https://crm-web-1np.pages.dev';
+const DEFAULT_ORIGINS = 'http://localhost:5173,https://ccs-invoice.pages.dev';
 
 export function getAllowedOrigins(env: Env): string[] {
   return (env.ALLOWED_ORIGINS ?? DEFAULT_ORIGINS)

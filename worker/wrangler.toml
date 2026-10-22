@@ -1,11 +1,11 @@
-name = "crm-app"
+name = "ccs-invoice-api"
 main = "src/index.ts"
 compatibility_date = "2025-03-01"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "crm-db"
-database_id = "94190e80-212f-4a5a-889c-c14a422947fd"
+database_name = "ccs-invoice-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 
 [[rules]]
 type = "Text"
@@ -14,4 +14,4 @@ fallthrough = true
 
 [vars]
 # Set API_SECRET via: wrangler secret put API_SECRET
-ALLOWED_ORIGINS = "https://ccs-invoice.pages.dev,https://crm-web-1np.pages.dev,http://localhost:5173"
+ALLOWED_ORIGINS = "https://ccs-invoice.pages.dev,http://localhost:5173"

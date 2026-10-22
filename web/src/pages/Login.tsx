@@ -30,7 +30,7 @@ function loginErrorMessage(message: string) {
     return 'Incorrect password. Please try again.';
   }
   if (lower.includes('not configured') || lower.includes('api_secret')) {
-    return 'Login is not set up yet. Add API_SECRET in Cloudflare for crm-app.';
+    return 'Login is not set up yet. Add API_SECRET in Cloudflare for ccs-invoice-api.';
   }
   if (
     lower.includes('temporarily unavailable') ||

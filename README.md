@@ -16,9 +16,9 @@ Summary:
 2. Push this folder to GitHub
 3. Add GitHub secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `WORKER_API_URL` (see [DEPLOY.md](./DEPLOY.md))
 4. Run the **Deploy to Cloudflare** GitHub Action
-5. Add `API_SECRET` in Cloudflare → **crm-app** → Variables and Secrets
+5. Add `API_SECRET` in Cloudflare → **ccs-invoice-api** → Variables and Secrets
 
-Open the live app from **Cloudflare Dashboard → Workers & Pages → crm-web → Visit site**.
+Open the live app from **Cloudflare Dashboard → Workers & Pages → ccs-invoice → Visit site**.
 
 > Deploy steps, secrets, and troubleshooting are in [DEPLOY.md](./DEPLOY.md). Do not commit your Worker API URL to the repo.
 
@@ -46,8 +46,8 @@ App/
 ```mermaid
 flowchart LR
     GitHub[GitHub push] --> Actions[GitHub Actions]
-    Actions --> Pages[Cloudflare Pages\ncrm-web]
-    Actions --> Worker[Cloudflare Worker\ncrm-app API]
+    Actions --> Pages[Cloudflare Pages\nccs-invoice]
+    Actions --> Worker[Cloudflare Worker\nccs-invoice-api API]
     Worker --> D1[(D1 SQLite)]
     Browser[Your browser] --> Pages
     Pages -->|/api requests| Worker

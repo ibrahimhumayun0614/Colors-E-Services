@@ -2,14 +2,14 @@
 
 Everything builds on **GitHub Actions** and deploys to **Cloudflare**. You only need a browser and Git (or GitHub Desktop).
 
-Open the app from **Cloudflare Dashboard → Workers & Pages → crm-web → Visit site** (bookmark that URL for daily use).
+Open the app from **Cloudflare Dashboard → Workers & Pages → ccs-invoice → Visit site** (bookmark that URL for daily use).
 
 | Project | Type | Where to find it |
 |---------|------|------------------|
-| **crm-web** | Pages (website) | Cloudflare → Workers & Pages → **crm-web** |
-| **crm-app** | Worker (API) | Cloudflare → Workers & Pages → **crm-app** |
+| **ccs-invoice** | Pages (website) | Cloudflare → Workers & Pages → **ccs-invoice** |
+| **ccs-invoice-api** | Worker (API) | Cloudflare → Workers & Pages → **ccs-invoice-api** |
 
-> Do **not** put your Worker API URL in this repo or in public docs. Configure it only as the GitHub secret `WORKER_API_URL` (see Step 4). Opening the Worker URL directly in a browser often shows 404 — that is normal. Always use **crm-web** for the app.
+> Do **not** put your Worker API URL in this repo or in public docs. Configure it only as the GitHub secret `WORKER_API_URL` (see Step 4). Opening the Worker URL directly in a browser often shows 404 — that is normal. Always use **ccs-invoice** for the app.
 ---
 
 ## Step 1 — Create the D1 database (Cloudflare Dashboard)
@@ -17,7 +17,7 @@ Open the app from **Cloudflare Dashboard → Workers & Pages → crm-web → Vis
 1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/)
 2. Open **Storage & Databases** → **D1 SQL Database**
 3. Click **Create database**
-4. Name it: `crm-db`
+4. Name it: `ccs-invoice-db`
 5. Copy the **Database ID** (a UUID like `a1b2c3d4-...`)
 
 6. Open `worker/wrangler.toml` in this project and replace:
@@ -82,10 +82,10 @@ In your GitHub repo:
 |------|--------|
 | `CLOUDFLARE_API_TOKEN` | Token from Step 3 |
 | `CLOUDFLARE_ACCOUNT_ID` | Account ID from Step 3 |
-| `WORKER_API_URL` | Worker base URL + `/api` from Cloudflare → **crm-app** → Triggers (e.g. `https://…workers.dev/api`). **Secrets only — never commit this URL.** |
-| `PAGES_PROJECT_NAME` | (optional) Default is `crm-web` |
+| `WORKER_API_URL` | Worker base URL + `/api` from Cloudflare → **ccs-invoice-api** → Triggers (e.g. `https://…workers.dev/api`). **Secrets only — never commit this URL.** |
+| `PAGES_PROJECT_NAME` | (optional) Default is `ccs-invoice` |
 
-> **Worker vs Pages:** `crm-app` is the API. `crm-web` is the website. Keep the API URL in GitHub Secrets, not in code or markdown.
+> **Worker vs Pages:** `ccs-invoice-api` is the API. `ccs-invoice` is the website. Keep the API URL in GitHub Secrets, not in code or markdown.
 
 ---
 
@@ -105,7 +105,7 @@ Wait ~2 minutes. When the green checkmark appears, your app is live.
 
 ## Step 6 — Set your API password (one time)
 
-1. Cloudflare Dashboard → **Workers & Pages** → **crm-app**
+1. Cloudflare Dashboard → **Workers & Pages** → **ccs-invoice-api**
 2. **Settings** → **Variables and Secrets**
 3. Under **Secrets**, add:
    - Name: `API_SECRET`
@@ -116,7 +116,7 @@ Wait ~2 minutes. When the green checkmark appears, your app is live.
 
 ## Step 7 — Open the app
 
-1. Cloudflare Dashboard → **Workers & Pages** → **crm-web** → **Visit site**
+1. Cloudflare Dashboard → **Workers & Pages** → **ccs-invoice** → **Visit site**
 2. Log in with your `API_SECRET` password
 
 You’re done. Bookmark your Pages URL for daily use.
@@ -129,11 +129,11 @@ Complete this checklist **after** deploy works and **before** you rely on the ap
 
 | Item | Action |
 |------|--------|
-| **Login lockout** | **Enable** rate limiting in production. Do **not** add `DISABLE_LOGIN_RATE_LIMIT` to Cloudflare **crm-app** secrets or vars. That flag is for local `.dev.vars` only while developing. |
+| **Login lockout** | **Enable** rate limiting in production. Do **not** add `DISABLE_LOGIN_RATE_LIMIT` to Cloudflare **ccs-invoice-api** secrets or vars. That flag is for local `.dev.vars` only while developing. |
 | **API password** | Use a strong random `API_SECRET` (not `local-dev-password`). |
 | **Shop profile** | In the app → **Settings → Profile**, set company name (e.g. **Colors Common Services**), address, and payment details for invoices. |
 | **Demo data** | Skip demo load in production, or remove demo data from **Settings → Data** when finished testing. |
-| **Origins** | In **crm-app** → **Variables**, set `ALLOWED_ORIGINS` to your live **crm-web** URL (and custom domain if you add one). |
+| **Origins** | In **ccs-invoice-api** → **Variables**, set `ALLOWED_ORIGINS` to your live **ccs-invoice** URL (and custom domain if you add one). |
 
 ---
 
@@ -156,8 +156,8 @@ Each push to `main` redeploys the **API and website only** (~2 min). Your databa
 | Action fails: unauthorized | Check `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets |
 | `Unauthorized` in the app | Settings → enter the same value as `API_SECRET` in Cloudflare |
 | Action fails: assets-upload / code 10013 | Fixed — app now deploys API + Pages separately |
-| Blank page on Pages | Set GitHub secret `WORKER_API_URL` to your Worker trigger URL + `/api` (from Cloudflare **crm-app**, not from this repo) |
-| Worker shows 404 in browser | Normal — API only. Open the app via **crm-web** in Cloudflare Dashboard |
+| Blank page on Pages | Set GitHub secret `WORKER_API_URL` to your Worker trigger URL + `/api` (from Cloudflare **ccs-invoice-api**, not from this repo) |
+| Worker shows 404 in browser | Normal — API only. Open the app via **ccs-invoice** in Cloudflare Dashboard |
 | Database errors | Re-run **Deploy to Cloudflare** with **Apply D1 schema** checked, or edit `worker/schema.sql` and push |
 | Explore with sample data | Open the app → **Settings → Data** → **Load demo data** |
 | Remove sample data | **Settings → Data** → **Remove demo data** (only `@demo.local` records) |
@@ -166,4 +166,4 @@ Each push to `main` redeploys the **API and website only** (~2 min). Your databa
 
 ## Custom domain (optional)
 
-Cloudflare → Workers → **crm-app** → **Settings** → **Domains & Routes** → add your domain.
+Cloudflare → Workers → **ccs-invoice-api** → **Settings** → **Domains & Routes** → add your domain.

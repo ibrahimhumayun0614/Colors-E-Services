@@ -155,9 +155,9 @@ flowchart TB
     end
 
     subgraph Cloudflare
-        Pages[Cloudflare Pages\ncrm-web]
-        Worker[Cloudflare Worker\ncrm-app API]
-        D1[(D1 SQLite\ncrm-db)]
+        Pages[Cloudflare Pages\nccs-invoice]
+        Worker[Cloudflare Worker\nccs-invoice-api API]
+        D1[(D1 SQLite\nccs-invoice-db)]
     end
 
     subgraph GitHub
@@ -731,7 +731,7 @@ flowchart LR
 | `CLOUDFLARE_API_TOKEN` | Deploy permissions |
 | `CLOUDFLARE_ACCOUNT_ID` | Account targeting |
 | `WORKER_API_URL` | Baked into frontend build |
-| `PAGES_PROJECT_NAME` | Optional, default `crm-web` |
+| `PAGES_PROJECT_NAME` | Optional, default `ccs-invoice` |
 
 ### Cloudflare secrets
 
@@ -746,7 +746,7 @@ flowchart LR
 | Deploy code | Push to `main` / `master` |
 | Apply DB schema | Auto on `schema.sql` change, or manual workflow |
 | Load demo data | Settings → Data, or CI workflow |
-| Change password | Cloudflare → crm-app → `API_SECRET` |
+| Change password | Cloudflare → ccs-invoice-api → `API_SECRET` |
 | Rotate session | Change `API_SECRET` (invalidates all tokens) |
 
 See **[DEPLOY.md](./DEPLOY.md)** for step-by-step setup.
